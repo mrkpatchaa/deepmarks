@@ -11,9 +11,16 @@
  *  8. data: URLs are omitted from output
  *  9. Titles with ] and [ chars are sanitized
  * 10. Compile 50 classified bookmarks — markdown structure assertion
+ *
+ * Tests for Task 6.2: exportJSON
+ * 11. exportJSON returns valid JSON with version + bookmarks array
+ * 12. exportJSON excludes entries with non-http(s) URLs
+ * 13. exportJSON output parses correctly with JSON.parse
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { compileWiki } from "../../src/lib/wiki/compile";
+import { exportJSON } from "../../src/lib/agent/export";
+import { upsertBookmark, closeDb, clearAllBookmarks } from "../../src/lib/storage/db";
 import type { BookmarkNode } from "../../src/lib/bookmarks/types";
 
 function bm(
@@ -142,5 +149,54 @@ describe("compileWiki — 50 bookmarks performance and structure", () => {
     for (let i = 0; i < 50; i++) {
       expect(out).toContain(`https://example.com/${String(i)}`);
     }
+  });
+});
+
+// ── Task 6.2: exportJSON ───────────────────────────────────────────────────
+
+describe("exportJSON", () => {
+  beforeEach(() => {
+    closeDb();
+    void clearAllBookmarks();
+  });
+
+  it("returns valid JSON with version + bookmarks array for empty IDB", async () => {
+    const json = await exportJSON();
+    const parsed: unknown = JSON.parse(json);
+    expect(typeof parsed).toBe("object");
+    expect((parsed as { version: number }).version).toBe(1);
+    expect(Array.isArray((parsed as { bookmarks: unknown[] }).bookmarks)).toBe(true);
+  });
+
+  it("includes bookmarks written to IDB", async () => {
+    await upsertBookmark({
+      id: "e1",
+      title: "Export Test",
+      url: "https://export-test.io",
+      parentId: "1",
+      dateAdded: Date.now(),
+      meta: undefined,
+    });
+    const json = await exportJSON();
+    const parsed = JSON.parse(json) as { version: number; bookmarks: { id: string; url: string }[] };
+    expect(parsed.bookmarks.length).toBeGreaterThan(0);    const entry = parsed.bookmarks.find((b) => b.id === "e1");
+    expect(entry).toBeDefined();
+    expect(entry?.url).toBe("https://export-test.io");
+  });
+
+  it("excludes entries with undefined URLs from export", async () => {
+    // folder node — url is undefined
+    await upsertBookmark({
+      id: "folder1",
+      title: "Folder",
+      url: undefined,
+      parentId: "0",
+      dateAdded: Date.now(),
+      meta: undefined,
+    });
+    const json = await exportJSON();
+    const parsed = JSON.parse(json) as { bookmarks: { id: string }[] };
+    const entry = parsed.bookmarks.find((b) => b.id === "folder1");
+    expect(entry).toBeUndefined();
   });
 });

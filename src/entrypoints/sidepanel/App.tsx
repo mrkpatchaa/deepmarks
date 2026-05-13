@@ -1,5 +1,5 @@
 /**
- * Side panel root — Task 3.1 + Task 3.2 + Task 3.3
+ * Side panel root — Task 3.1 + Task 3.2 + Task 3.3 + Task 6.2
  *
  * Loads bookmarks directly from IndexedDB via cursor-based pagination
  * (page size 200). No GET_ALL message to the background worker.
@@ -12,20 +12,31 @@
  * list by category. Combined filter + search both apply simultaneously.
  * Category counts are derived from allBookmarks (full IDB set).
  *
+ * Wiki tab (Task 6.2): compiles all classified bookmarks into a markdown
+ * wiki rendered via react-markdown + rehype-sanitize.
+ *
  * SECURITY:
  *   - No remote resources of any kind are requested.
  *   - URL scheme guard is enforced inside BookmarkCard.
  *   - Search query is Zod-validated in the background message handler.
+ *   - Wiki markdown rendered with skipHtml + rehype-sanitize.
+ *   - Export requires explicit user gesture (button click), uses File System Access API.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getBookmarkPage } from "../../lib/storage/db";
+import { getBookmarkPage, getAllBookmarks } from "../../lib/storage/db";
 import { BookmarkList } from "../../components/BookmarkList";
 import { SearchBar } from "../../components/SearchBar";
 import { CategoryFilter } from "../../components/CategoryFilter";
+import { WikiView } from "../../components/WikiView";
+import { compileWiki } from "../../lib/wiki/compile";
+import { saveWikiFile } from "../../lib/wiki/export";
+import { exportJSON } from "../../lib/agent/export";
 import type { FilterCategory, CategoryCounts } from "../../components/CategoryFilter";
 import type { BookmarkNode, SearchResult } from "../../lib/bookmarks/types";
 
 const PAGE_SIZE = 200;
+
+type TabId = "bookmarks" | "wiki";
 
 /** Mutable ref bag — avoids stale closure issues without extra re-renders. */
 interface LoadState {
@@ -35,10 +46,13 @@ interface LoadState {
 }
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<TabId>("bookmarks");
   const [allBookmarks, setAllBookmarks] = useState<BookmarkNode[]>([]);
   const [searchResults, setSearchResults] = useState<BookmarkNode[] | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<FilterCategory>("all");
   const [initialLoading, setInitialLoading] = useState(true);
+  const [wikiMarkdown, setWikiMarkdown] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const loadState = useRef<LoadState>({
     lastKey: undefined,
     hasMore: true,
@@ -93,6 +107,43 @@ export default function App() {
     setSelectedCategory((prev) => (prev === cat ? "all" : cat));
   }, []);
 
+  // Compile wiki when switching to wiki tab.
+  const handleTabChange = useCallback((tab: TabId): void => {
+    setActiveTab(tab);
+    if (tab === "wiki") {
+      setWikiMarkdown(compileWiki(allBookmarks));
+    }
+  }, [allBookmarks]);
+
+  // Export for agents — requires user gesture, uses File System Access API.
+  const handleExport = useCallback((): void => {
+    setExportError(null);
+    void (async () => {
+      try {
+        const result = await getAllBookmarks();
+        if (!result.ok) {
+          setExportError("Failed to load bookmarks for export.");
+          return;
+        }
+        const bookmarks = result.value;
+        // File System Access API — not in lib.dom.d.ts, cast via unknown to avoid TS error
+        const dirPicker = (window as unknown as { showDirectoryPicker: (opts?: { mode?: string }) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
+        const dirHandle = await dirPicker({ mode: "readwrite" });
+        // Write wiki markdown
+        await saveWikiFile(bookmarks, dirHandle);
+        // Write JSON
+        const jsonStr = await exportJSON();
+        const jsonHandle = await dirHandle.getFileHandle("bookmarks-export.json", { create: true });
+        const writable = await jsonHandle.createWritable();
+        await writable.write(jsonStr);
+        await writable.close();
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return; // user cancelled
+        setExportError("Export failed. Please try again.");
+      }
+    })();
+  }, []);
+
   // Category counts derived from the full allBookmarks list (not filtered).
   const categoryCounts: CategoryCounts = useMemo(() => {
     const counts: CategoryCounts = {
@@ -136,22 +187,67 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col bg-white dark:bg-zinc-900">
       <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
-        <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Deepmarks
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Deepmarks
+          </h1>
+          <button
+            type="button"
+            onClick={handleExport}
+            className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            Export for Agents
+          </button>
+        </div>
+        {exportError !== null && (
+          <p className="mt-1 text-xs text-red-500" role="alert">{exportError}</p>
+        )}
       </header>
-      <SearchBar onSearch={handleSearch} resultCount={resultCount} />
-      <CategoryFilter
-        counts={categoryCounts}
-        selected={selectedCategory}
-        onSelect={handleCategorySelect}
-      />
-      <main className="flex-1 overflow-hidden">
-        <BookmarkList
-          bookmarks={displayedBookmarks}
-          onScrollNearEnd={searchResults === null ? loadPage : undefined}
-        />
-      </main>
+
+      {/* Tab row */}
+      <nav className="flex border-b border-zinc-200 dark:border-zinc-700" aria-label="View tabs">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "bookmarks"}
+          onClick={() => { handleTabChange("bookmarks"); }}
+          className={`px-4 py-2 text-sm font-medium ${activeTab === "bookmarks" ? "border-b-2 border-blue-500 text-blue-600 dark:text-blue-400" : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"}`}
+        >
+          Bookmarks
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "wiki"}
+          onClick={() => { handleTabChange("wiki"); }}
+          className={`px-4 py-2 text-sm font-medium ${activeTab === "wiki" ? "border-b-2 border-blue-500 text-blue-600 dark:text-blue-400" : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"}`}
+        >
+          Wiki
+        </button>
+      </nav>
+
+      {activeTab === "bookmarks" && (
+        <>
+          <SearchBar onSearch={handleSearch} resultCount={resultCount} />
+          <CategoryFilter
+            counts={categoryCounts}
+            selected={selectedCategory}
+            onSelect={handleCategorySelect}
+          />
+          <main className="flex-1 overflow-hidden">
+            <BookmarkList
+              bookmarks={displayedBookmarks}
+              onScrollNearEnd={searchResults === null ? loadPage : undefined}
+            />
+          </main>
+        </>
+      )}
+
+      {activeTab === "wiki" && (
+        <main className="flex-1 overflow-y-auto px-4 py-4">
+          {wikiMarkdown !== null && <WikiView markdown={wikiMarkdown} />}
+        </main>
+      )}
     </div>
   );
 }
