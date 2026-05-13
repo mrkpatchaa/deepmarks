@@ -16,7 +16,8 @@ import { CategoryEditor } from "../../components/Settings/CategoryEditor";
 
 function OptionsApp() {
   return (
-    <div className="mx-auto max-w-2xl space-y-8 p-8">
+    <div className="min-h-screen bg-white px-4 py-8 dark:bg-zinc-900">
+      <div className="mx-auto max-w-2xl space-y-8">
       <header>
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
           Deepmarks Settings
@@ -37,6 +38,7 @@ function OptionsApp() {
       <hr className="border-zinc-200 dark:border-zinc-700" />
 
       <CategoryEditor />
+      </div>
     </div>
   );
 }

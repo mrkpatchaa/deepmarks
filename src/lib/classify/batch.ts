@@ -25,9 +25,9 @@ import { isSafeUrl } from "../bookmarks/url";
 const REGEX_CONCURRENCY = 5;
 
 export interface ClassifyAllProgress {
-  done: number;
-  total: number;
-  failed: number;
+    done: number;
+    total: number;
+    failed: number;
 }
 
 /**
@@ -40,53 +40,53 @@ export interface ClassifyAllProgress {
  * @param forceReclassify  When true, re-classify already-categorised bookmarks too
  */
 export async function classifyAll(
-  bookmarks: BookmarkNode[],
-  engine: BYOKEngine,
-  onProgress: (progress: ClassifyAllProgress) => void,
-  signal: AbortSignal,
-  forceReclassify = false,
+    bookmarks: BookmarkNode[],
+    engine: BYOKEngine,
+    onProgress: (progress: ClassifyAllProgress) => void,
+    signal: AbortSignal,
+    forceReclassify = false,
 ): Promise<ClassifyAllProgress> {
-  // Filter to eligible candidates.
-  const candidates = bookmarks.filter((bm) => {
-    if (!isSafeUrl(bm.url)) return false;
-    if (!forceReclassify && bm.meta?.category !== undefined) return false;
-    return true;
-  });
+    // Filter to eligible candidates.
+    const candidates = bookmarks.filter((bm) => {
+        if (!isSafeUrl(bm.url)) return false;
+        if (!forceReclassify && bm.meta?.category !== undefined) return false;
+        return true;
+    });
 
-  const total = candidates.length;
-  let done = 0;
-  let failed = 0;
+    const total = candidates.length;
+    let done = 0;
+    let failed = 0;
 
-  if (total === 0) {
-    onProgress({ done: 0, total: 0, failed: 0 });
-    return { done: 0, total: 0, failed: 0 };
-  }
+    if (total === 0) {
+        onProgress({ done: 0, total: 0, failed: 0 });
+        return { done: 0, total: 0, failed: 0 };
+    }
 
-  // Detect which engine will actually be used so we can set concurrency.
-  const activeEngine = await getActiveEngine(engine);
-  const concurrency = activeEngine === "regex" ? REGEX_CONCURRENCY : 1;
+    // Detect which engine will actually be used so we can set concurrency.
+    const activeEngine = await getActiveEngine(engine);
+    const concurrency = activeEngine === "regex" ? REGEX_CONCURRENCY : 1;
 
-  // Process in chunks of `concurrency`.
-  for (let i = 0; i < candidates.length; i += concurrency) {
-    if (signal.aborted) break;
+    // Process in chunks of `concurrency`.
+    for (let i = 0; i < candidates.length; i += concurrency) {
+        if (signal.aborted) break;
 
-    const chunk = candidates.slice(i, i + concurrency);
-    await Promise.all(
-      chunk.map(async (bm) => {
-        if (signal.aborted) return;
-        const result = await classify(
-          bm.id,
-          bm.url ?? "",
-          bm.title,
-          engine,
+        const chunk = candidates.slice(i, i + concurrency);
+        await Promise.all(
+            chunk.map(async (bm) => {
+                if (signal.aborted) return;
+                const result = await classify(
+                    bm.id,
+                    bm.url ?? "",
+                    bm.title,
+                    engine,
+                );
+                if (!result.ok) failed += 1;
+                done += 1;
+            }),
         );
-        if (!result.ok) failed += 1;
-        done += 1;
-      }),
-    );
 
-    onProgress({ done, total, failed });
-  }
+        onProgress({ done, total, failed });
+    }
 
-  return { done, total, failed };
+    return { done, total, failed };
 }
