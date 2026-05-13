@@ -20,6 +20,7 @@ export function BookmarkCard({ bookmark, onClassify }: BookmarkCardProps) {
   const initial = domainInitial(url);
   const safe = isSafeUrl(url);
   const categoryBadge = bookmark.meta?.category;
+  const domainBadge = bookmark.meta?.domain;
 
   return (
     <div className="flex items-start gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 group">
@@ -59,6 +60,11 @@ export function BookmarkCard({ bookmark, onClassify }: BookmarkCardProps) {
           {categoryBadge !== undefined ? (
             <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium capitalize text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
               {categoryBadge}
+            </span>
+          ) : null}
+          {domainBadge !== undefined ? (
+            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+              {domainBadge}
             </span>
           ) : null}
           {onClassify !== undefined && url !== undefined && safe && (

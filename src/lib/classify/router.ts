@@ -23,6 +23,8 @@ import { getBookmarkById, upsertBookmark } from "../storage/db";
 
 export interface ClassifyOutput {
     category: Category;
+    /** Subject-matter field slug from LLM (e.g. "ai"). Undefined for regex results. */
+    domain?: string;
     /** The engine that actually produced the result (may differ from requested). */
     usedEngine: ClassifyEngine;
 }
@@ -59,6 +61,7 @@ async function persistMeta(
     id: string,
     category: Category,
     engine: ClassifyEngine,
+    domain?: string,
 ): Promise<void> {
     const bookmarkResult = await getBookmarkById(id);
     if (!bookmarkResult.ok || bookmarkResult.value === undefined) return;
@@ -70,6 +73,7 @@ async function persistMeta(
             category,
             classifiedAt: Date.now(),
             classifiedBy: engine,
+            domain,
         },
     };
     await upsertBookmark(updated);
@@ -94,13 +98,15 @@ export async function classify(
 ): Promise<Result<ClassifyOutput>> {
     let category: Category;
     let usedEngine: ClassifyEngine;
+    let domain: string | undefined;
 
     const byokAvailable = await isByokAvailable(engine);
 
     if (byokAvailable) {
         const byokResult = await classifyWithBYOK(url, title, engine);
         if (byokResult.ok) {
-            category = byokResult.value;
+            category = byokResult.value.category;
+            domain = byokResult.value.domain;
             usedEngine = engine;
         } else if (engine === "ollama") {
             // Ollama is local — the user explicitly chose it. Surface the error
@@ -119,11 +125,11 @@ export async function classify(
     }
 
     // Persist the result to IndexedDB. Failure is non-fatal — log and continue.
-    await persistMeta(id, category, usedEngine).catch(() => {
+    await persistMeta(id, category, usedEngine, domain).catch(() => {
         // Intentionally swallowed — classify result is still valid.
     });
 
-    return ok({ category, usedEngine });
+    return ok({ category, domain, usedEngine });
 }
 
 /**

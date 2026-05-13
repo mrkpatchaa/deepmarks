@@ -18,6 +18,13 @@ import { z } from "zod";
 import type { Category, ClassifyEngine, Result } from "../bookmarks/types";
 import { err, ok } from "../bookmarks/types";
 
+/** Output produced by a successful BYOK classification. */
+export interface BYOKResult {
+    category: Category;
+    /** Subject-matter field slug assigned by the LLM (e.g. "ai", "web-dev"). Absent for plain-text responses. */
+    domain?: string;
+}
+
 /** Subset of ClassifyEngine that performs actual API calls. */
 export type BYOKEngine = Exclude<ClassifyEngine, "regex">;
 
@@ -26,9 +33,10 @@ const BYOK_TIMEOUT_MS = 10_000;
 /** System prompt — separated from user data to prevent prompt injection. */
 const SYSTEM_PROMPT =
     "You are a bookmark classifier. " +
-    "Given a URL and title, respond with exactly one of these categories: " +
-    "tool, security, technique, launch, research, opinion, commerce, other. " +
-    "Respond with only the category name — no punctuation, no explanation.";
+    'Given a URL and title, respond with a JSON object with exactly two keys: "category" and "domain". ' +
+    '"category" must be exactly one of: tool, security, technique, launch, research, opinion, commerce, other. ' +
+    '"domain" is the subject field — a short lowercase hyphenated slug (e.g. ai, finance, web-dev, devops, startups, design, science, security, gaming, media). ' +
+    "Respond with only the JSON object — no markdown, no explanation.";
 
 /** chrome.storage.local key per engine that stores the API key (or model name for Ollama). */
 const STORAGE_KEY: Record<BYOKEngine, string> = {
@@ -84,6 +92,15 @@ const CategorySchema = z.enum([
     "commerce",
     "other",
 ] as const);
+
+/**
+ * New JSON classify response format: {"category":"tool","domain":"ai"}.
+ * Plain-text responses (legacy / simple models) are handled by a fallback path.
+ */
+const ClassifyResponseSchema = z.object({
+    category: CategorySchema,
+    domain: z.string().optional(),
+});
 
 const OpenAIResponseSchema = z.object({
     choices: z
@@ -164,7 +181,7 @@ function buildFetchParams(
                         { role: "system", content: SYSTEM_PROMPT },
                         { role: "user", content: userMessage },
                     ],
-                    max_tokens: 20,
+                    max_tokens: 50,
                     temperature: 0,
                 },
             };
@@ -180,7 +197,7 @@ function buildFetchParams(
                     model: "claude-3-5-haiku-latest",
                     system: SYSTEM_PROMPT,
                     messages: [{ role: "user", content: userMessage }],
-                    max_tokens: 20,
+                    max_tokens: 50,
                 },
             };
         case "gemini":
@@ -194,7 +211,7 @@ function buildFetchParams(
                 body: {
                     system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
                     contents: [{ role: "user", parts: [{ text: userMessage }] }],
-                    generationConfig: { maxOutputTokens: 20, temperature: 0 },
+                    generationConfig: { maxOutputTokens: 50, temperature: 0 },
                 },
             };
         case "ollama":
@@ -209,7 +226,7 @@ function buildFetchParams(
                         { role: "system", content: SYSTEM_PROMPT },
                         { role: "user", content: userMessage },
                     ],
-                    max_tokens: 20,
+                    max_tokens: 50,
                     temperature: 0,
                 },
             };
@@ -222,7 +239,7 @@ async function doClassify(
     url: string,
     title: string,
     engine: BYOKEngine,
-): Promise<Result<Category>> {
+): Promise<Result<BYOKResult>> {
     // 1. Consent check — Ollama runs locally so no consent is required.
     if (engine !== "ollama") {
         const hasConsent = await readBoolStorage(CONSENT_KEY);
@@ -298,14 +315,53 @@ async function doClassify(
         return err("Unexpected response format");
     }
 
-    // 8. Validate the extracted text is one of the known categories.
-    const normalized = rawText.toLowerCase().trim();
-    const parsed = CategorySchema.safeParse(normalized);
-    if (!parsed.success) {
-        return err(`Unrecognised category in response: "${normalized}"`);
+    // 8. Parse the inner content.
+    // Try JSON first (new format: {"category":"...","domain":"..."}),
+    // then fall back to plain-text category (legacy / simple models).
+    let category: Category;
+    let domain: string | undefined;
+
+    const stripped = rawText
+        .replace(/^```json?\s*/i, "")
+        .replace(/\s*```$/, "")
+        .trim();
+
+    let innerJson: unknown;
+    try {
+        innerJson = JSON.parse(stripped);
+    } catch {
+        innerJson = undefined;
     }
 
-    return ok(parsed.data);
+    if (
+        innerJson !== undefined &&
+        typeof innerJson === "object" &&
+        innerJson !== null
+    ) {
+        // JSON format path
+        const parsed = ClassifyResponseSchema.safeParse(innerJson);
+        if (!parsed.success) {
+            const rawCat =
+                "category" in innerJson &&
+                typeof (innerJson as Record<string, unknown>).category === "string"
+                    ? ((innerJson as Record<string, unknown>).category as string)
+                    : "unknown";
+            return err(`Unrecognised category in response: "${rawCat}"`);
+        }
+        category = parsed.data.category;
+        domain = parsed.data.domain;
+    } else {
+        // Plain-text fallback (backward-compatible with test mocks and older models)
+        const normalized = rawText.toLowerCase().trim();
+        const parsed = CategorySchema.safeParse(normalized);
+        if (!parsed.success) {
+            return err(`Unrecognised category in response: "${normalized}"`);
+        }
+        category = parsed.data;
+        domain = undefined;
+    }
+
+    return ok({ category, domain });
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
@@ -324,6 +380,6 @@ export function classifyWithBYOK(
     url: string,
     title: string,
     engine: BYOKEngine,
-): Promise<Result<Category>> {
+): Promise<Result<BYOKResult>> {
     return enqueue(() => doClassify(url, title, engine));
 }

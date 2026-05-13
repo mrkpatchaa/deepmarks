@@ -31,6 +31,8 @@ export type ClassifyEngine = "regex" | "openai" | "anthropic" | "gemini" | "olla
  */
 export interface BookmarkMeta {
     category: Category | undefined;
+    /** Subject-matter domain assigned by LLM (e.g. "ai", "web-dev", "finance"). */
+    domain?: string;
     tags: string[];
     classifiedAt: number | undefined;
     classifiedBy: ClassifyEngine;

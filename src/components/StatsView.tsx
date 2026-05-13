@@ -119,7 +119,8 @@ export function StatsView() {
     const unclassified = data.total - data.classified;
 
     const maxCatCount = data.categories[0]?.count ?? 1;
-    const maxDomainCount = data.topDomains[0]?.count ?? 1;
+    const maxDomainCount = data.topSites[0]?.count ?? 1;
+    const maxSubjectCount = data.subjectDomains[0]?.count ?? 1;
 
     return (
         <div className="space-y-5 overflow-y-auto px-4 py-4">
@@ -170,13 +171,13 @@ export function StatsView() {
             )}
 
             {/* Top link domains */}
-            {data.topDomains.length > 0 && (
+            {data.topSites.length > 0 && (
                 <section>
                     <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                         Top Sites
                     </h2>
                     <div className="space-y-1">
-                        {data.topDomains.map((d, i) => (
+                        {data.topSites.map((d, i) => (
                             <BarRow
                                 key={d.domain}
                                 label={d.domain}
@@ -186,6 +187,30 @@ export function StatsView() {
                                 color={
                                     DOMAIN_COLORS[i % DOMAIN_COLORS.length] ??
                                     "#0d9488"
+                                }
+                            />
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {/* Subject-matter domains (LLM-assigned) */}
+            {data.subjectDomains.length > 0 && (
+                <section>
+                    <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        Subject Domains
+                    </h2>
+                    <div className="space-y-1">
+                        {data.subjectDomains.map((d, i) => (
+                            <BarRow
+                                key={d.name}
+                                label={d.name}
+                                count={d.count}
+                                maxCount={maxSubjectCount}
+                                total={data.classified}
+                                color={
+                                    CATEGORY_COLORS[i % CATEGORY_COLORS.length] ??
+                                    "#6366f1"
                                 }
                             />
                         ))}

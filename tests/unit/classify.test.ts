@@ -559,7 +559,8 @@ describe("classifyWithBYOK — OpenAI", () => {
   it("returns the category from a valid OpenAI response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(openAIResponse("tool")));
     const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
-    expect(result).toEqual({ ok: true, value: "tool" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.category).toBe("tool");
   });
 
   it("returns error on HTTP 401", async () => {
@@ -647,7 +648,8 @@ describe("classifyWithBYOK — Anthropic", () => {
       vi.fn().mockResolvedValue(anthropicResponse("security")),
     );
     const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "anthropic");
-    expect(result).toEqual({ ok: true, value: "security" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.category).toBe("security");
   });
 });
 
@@ -668,7 +670,8 @@ describe("classifyWithBYOK — Gemini", () => {
       vi.fn().mockResolvedValue(geminiResponse("research")),
     );
     const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "gemini");
-    expect(result).toEqual({ ok: true, value: "research" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.category).toBe("research");
   });
 });
 
@@ -726,8 +729,10 @@ describe("classifyWithBYOK — concurrency queue", () => {
       classifyWithBYOK("https://arxiv.org/b", "B", "openai"),
     ]);
 
-    expect(r1).toEqual({ ok: true, value: "tool" });
-    expect(r2).toEqual({ ok: true, value: "research" });
+    expect(r1.ok).toBe(true);
+    if (r1.ok) expect(r1.value.category).toBe("tool");
+    expect(r2.ok).toBe(true);
+    if (r2.ok) expect(r2.value.category).toBe("research");
     // fetch was called exactly twice — second call was queued, not dropped
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
   });
