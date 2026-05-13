@@ -1,5 +1,5 @@
 /**
- * Side panel root — Task 3.1 + Task 3.2 + Task 3.3 + Task 6.2
+ * Side panel root — Task 3.1 + Task 3.2 + Task 3.3 + Task 6.2 + Task 7.1
  *
  * Loads bookmarks directly from IndexedDB via cursor-based pagination
  * (page size 200). No GET_ALL message to the background worker.
@@ -14,6 +14,9 @@
  *
  * Wiki tab (Task 6.2): compiles all classified bookmarks into a markdown
  * wiki rendered via react-markdown + rehype-sanitize.
+ *
+ * Daemon banner (Task 7.1): polls DAEMON_STATUS on mount; shows a banner
+ * if the native host is not installed.
  *
  * SECURITY:
  *   - No remote resources of any kind are requested.
@@ -53,6 +56,7 @@ export default function App() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [wikiMarkdown, setWikiMarkdown] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [daemonReady, setDaemonReady] = useState<boolean | null>(null);
   const loadState = useRef<LoadState>({
     lastKey: undefined,
     hasMore: true,
@@ -87,6 +91,18 @@ export default function App() {
     loadPage();
     setInitialLoading(false);
   }, [loadPage]);
+
+  // Check daemon status on mount (lazy — doesn't connect; background just reads flag).
+  useEffect(() => {
+    chrome.runtime.sendMessage(
+      { type: "DAEMON_STATUS" },
+      (response: { installed: boolean } | undefined) => {
+        if (response !== undefined) {
+          setDaemonReady(response.installed);
+        }
+      },
+    );
+  }, []);
 
   // Handle search query — send SEARCH message to background, show results.
   const handleSearch = useCallback((query: string): void => {
@@ -203,6 +219,24 @@ export default function App() {
           <p className="mt-1 text-xs text-red-500" role="alert">{exportError}</p>
         )}
       </header>
+
+      {/* Daemon not installed banner */}
+      {daemonReady === false && (
+        <div
+          role="alert"
+          className="bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+        >
+          Install daemon to enable agent integration.{" "}
+          <a
+            href="https://github.com/deepmarks/deepmarks#daemon"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Learn more
+          </a>
+        </div>
+      )}
 
       {/* Tab row */}
       <nav className="flex border-b border-zinc-200 dark:border-zinc-700" aria-label="View tabs">
