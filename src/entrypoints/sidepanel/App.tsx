@@ -291,6 +291,11 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
                   {classifyAllState.done} / {classifyAllState.total === 0 ? "…" : String(classifyAllState.total)}
+                  {classifyAllState.failed > 0 && (
+                    <span className="ml-1 text-red-500">
+                      ({classifyAllState.failed} failed)
+                    </span>
+                  )}
                 </span>
                 <button
                   type="button"

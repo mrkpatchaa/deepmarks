@@ -102,9 +102,14 @@ export async function classify(
         if (byokResult.ok) {
             category = byokResult.value;
             usedEngine = engine;
+        } else if (engine === "ollama") {
+            // Ollama is local — the user explicitly chose it. Surface the error
+            // (e.g. 403 / OLLAMA_ORIGINS) so they can act on it, rather than
+            // silently reclassifying with regex and hiding the misconfiguration.
+            return err(byokResult.error);
         } else {
-            // BYOK failed — fall back to regex silently (never surface BYOK errors
-            // to the user without also providing a usable result).
+            // Cloud BYOK failed — fall back to regex silently so the user always
+            // gets a usable result even during transient API outages.
             category = classifyByRegex(url, title);
             usedEngine = "regex";
         }

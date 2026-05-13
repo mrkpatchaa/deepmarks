@@ -268,6 +268,12 @@ async function doClassify(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+        if (response.status === 403 && engine === "ollama") {
+            return err(
+                "Ollama blocked the request (403 Forbidden). " +
+                "Restart Ollama with: OLLAMA_ORIGINS=* ollama serve",
+            );
+        }
         return err(`Request failed (HTTP ${String(response.status)})`);
     }
 
