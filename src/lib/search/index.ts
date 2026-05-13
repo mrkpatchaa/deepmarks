@@ -117,3 +117,37 @@ export function resetIndex(): void {
   _idx = null;
   _nodeMap = new Map();
 }
+
+// ---------------------------------------------------------------------------
+// Incremental update helpers (Task 2.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a single bookmark to the existing index (no full rebuild).
+ * No-op if the index has not been built yet (next buildIndex will include it).
+ */
+export function addToIndex(node: BookmarkNode): void {
+  if (_idx === null) return;
+  _idx.add({ id: node.id, title: node.title, url: node.url ?? "" });
+  _nodeMap.set(node.id, node);
+}
+
+/**
+ * Update a single bookmark in the existing index.
+ * No-op if the index has not been built yet.
+ */
+export function updateInIndex(node: BookmarkNode): void {
+  if (_idx === null) return;
+  _idx.update(node.id, { id: node.id, title: node.title, url: node.url ?? "" });
+  _nodeMap.set(node.id, node);
+}
+
+/**
+ * Remove a single bookmark from the index by id.
+ * No-op if the index has not been built yet.
+ */
+export function removeFromIndex(id: string): void {
+  if (_idx === null) return;
+  _idx.remove(id);
+  _nodeMap.delete(id);
+}
