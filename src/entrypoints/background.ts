@@ -172,10 +172,21 @@ function registerMessageHandler(): void {
 export default defineBackground(() => {
     chrome.runtime.onInstalled.addListener(() => {
         void initialSync();
+        // Ensure clicking the toolbar icon always opens the side panel.
+        void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
     });
 
     chrome.runtime.onStartup.addListener(() => {
         void initialSync();
+        void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    });
+
+    // Fallback: open side panel on action click in case setPanelBehavior is
+    // not yet effective (e.g. first install before onInstalled fires).
+    chrome.action.onClicked.addListener((tab) => {
+        if (tab.windowId !== undefined) {
+            void chrome.sidePanel.open({ windowId: tab.windowId });
+        }
     });
 
     // Tear down the native messaging port when the service worker is about to

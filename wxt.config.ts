@@ -21,9 +21,10 @@ export default defineConfig({
         side_panel: {
             default_path: "sidepanel/index.html",
         },
-        action: {
-            default_popup: "popup/index.html",
-        },
+        // No default_popup — clicking the action icon opens the side panel
+        // directly via chrome.action.onClicked in the background service worker.
+        action: {},
+
         options_ui: {
             page: "options/index.html",
             open_in_tab: true,
