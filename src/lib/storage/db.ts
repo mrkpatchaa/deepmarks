@@ -123,6 +123,33 @@ export async function clearAllBookmarks(): Promise<Result<void>> {
 }
 
 /**
+ * Retrieve a page of bookmarks using a key-range cursor (Task 3.1).
+ *
+ * @param startAfterKey - Primary key to start after (exclusive).
+ *   Pass `undefined` for the first page.
+ * @param limit - Maximum number of records to return. Default 200.
+ *
+ * When the returned array length < limit, there are no more pages.
+ */
+export async function getBookmarkPage(
+  startAfterKey: string | undefined,
+  limit = 200,
+): Promise<Result<BookmarkNode[]>> {
+  try {
+    const db = await openDb();
+    const range =
+      startAfterKey !== undefined
+        ? IDBKeyRange.lowerBound(startAfterKey, true)
+        : undefined;
+    const tx = db.transaction("bookmarks", "readonly");
+    const records = await tx.store.getAll(range, limit);
+    return ok(records);
+  } catch (e) {
+    return err(e instanceof Error ? e.message : String(e));
+  }
+}
+
+/**
  * Close the current DB connection and clear the cached instance.
  *
  * Use this in tests to reset state between test runs, or if the DB version
