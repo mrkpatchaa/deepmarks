@@ -1,5 +1,6 @@
 /**
- * Tests for the regex classifier (Task 4.1) and BYOK classifier (Task 4.2)
+ * Tests for the regex classifier (Task 4.1), BYOK classifier (Task 4.2),
+ * and classify router (Task 4.3).
  *
  * Regex covers:
  *  1. Spec-required mappings (github.com→tool, arxiv.org→research, etc.)
@@ -13,12 +14,23 @@
  *  7. HTTP error / invalid JSON / unrecognised category → graceful errors
  *  8. AbortError (timeout) + network error → graceful errors
  *  9. Concurrent calls are queued, not dropped
+ *
+ * Router covers:
+ * 10. BYOK available + succeeds → uses BYOK engine
+ * 11. BYOK configured + BYOK fails → falls back to regex (never errors)
+ * 12. BYOK not configured (no consent) → uses regex
+ * 13. getActiveEngine returns BYOK engine when configured, regex otherwise
+ * 14. classify() always returns ok Result
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Category } from "../../src/lib/bookmarks/types";
 import { classifyByRegex } from "../../src/lib/classify/regex";
 import { ALL_CATEGORIES } from "../../src/lib/classify/categories";
 import { classifyWithBYOK, CONSENT_KEY } from "../../src/lib/classify/byok";
+import { classify, getActiveEngine } from "../../src/lib/classify/router";
+import "fake-indexeddb/auto";
+import { closeDb, clearAllBookmarks, upsertBookmark } from "../../src/lib/storage/db";
+import type { BookmarkNode } from "../../src/lib/bookmarks/types";
 
 // ── 50-URL classification fixture ─────────────────────────────────────────
 
@@ -718,5 +730,164 @@ describe("classifyWithBYOK — concurrency queue", () => {
     expect(r2).toEqual({ ok: true, value: "research" });
     // fetch was called exactly twice — second call was queued, not dropped
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
+  });
+});
+
+// ── Classify router ───────────────────────────────────────────────────────
+
+const BASE_BOOKMARK: BookmarkNode = {
+  id: "bm-router-1",
+  title: "Example Tool",
+  url: "https://github.com/example/tool",
+  parentId: "0",
+  dateAdded: 1_700_000_000_000,
+  meta: undefined,
+};
+
+describe("classify router — BYOK available + succeeds", () => {
+  beforeEach(async () => {
+    closeDb();
+    await clearAllBookmarks();
+    await upsertBookmark(BASE_BOOKMARK);
+    setupStorage({
+      consent: true,
+      openaiKey: FAKE_OPENAI_KEY,
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the BYOK category and engine when BYOK succeeds", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(openAIResponse("tool")));
+
+    const result = await classify(
+      BASE_BOOKMARK.id,
+      BASE_BOOKMARK.url ?? "",
+      BASE_BOOKMARK.title,
+      "openai",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.category).toBe("tool");
+    expect(result.value.usedEngine).toBe("openai");
+  });
+});
+
+describe("classify router — BYOK configured but fails → falls back to regex", () => {
+  beforeEach(async () => {
+    closeDb();
+    await clearAllBookmarks();
+    await upsertBookmark(BASE_BOOKMARK);
+    setupStorage({
+      consent: true,
+      openaiKey: FAKE_OPENAI_KEY,
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns ok with regex category when BYOK returns an error", async () => {
+    // BYOK returns HTTP 500 → classifyWithBYOK resolves to { ok: false }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve("Internal Server Error"),
+      }),
+    );
+
+    const result = await classify(
+      BASE_BOOKMARK.id,
+      BASE_BOOKMARK.url ?? "",
+      BASE_BOOKMARK.title,
+      "openai",
+    );
+
+    // Must always return ok — never propagate BYOK errors to caller
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Fell back to regex — engine must be "regex"
+    expect(result.value.usedEngine).toBe("regex");
+    // Regex should classify github.com as "tool"
+    expect(result.value.category).toBe("tool");
+  });
+
+  it("returns ok with regex category when fetch throws (network error)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Network Error")),
+    );
+
+    const result = await classify(
+      BASE_BOOKMARK.id,
+      BASE_BOOKMARK.url ?? "",
+      BASE_BOOKMARK.title,
+      "openai",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.usedEngine).toBe("regex");
+    expect(result.value.category).toBe("tool");
+  });
+});
+
+describe("classify router — BYOK not configured (no consent) → uses regex", () => {
+  beforeEach(async () => {
+    closeDb();
+    await clearAllBookmarks();
+    await upsertBookmark(BASE_BOOKMARK);
+    setupStorage({ consent: false });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns ok with regex result and makes zero fetch calls", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const result = await classify(
+      BASE_BOOKMARK.id,
+      BASE_BOOKMARK.url ?? "",
+      BASE_BOOKMARK.title,
+      "openai",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.usedEngine).toBe("regex");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("getActiveEngine", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the BYOK engine when consent + key are configured", async () => {
+    setupStorage({ consent: true, openaiKey: FAKE_OPENAI_KEY });
+    const engine = await getActiveEngine("openai");
+    expect(engine).toBe("openai");
+  });
+
+  it("returns 'regex' when consent is missing", async () => {
+    setupStorage({ consent: false, openaiKey: FAKE_OPENAI_KEY });
+    const engine = await getActiveEngine("openai");
+    expect(engine).toBe("regex");
+  });
+
+  it("returns 'regex' when key is missing", async () => {
+    setupStorage({ consent: true });
+    const engine = await getActiveEngine("openai");
+    expect(engine).toBe("regex");
   });
 });
