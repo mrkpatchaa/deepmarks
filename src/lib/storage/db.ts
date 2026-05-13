@@ -150,6 +150,55 @@ export async function getBookmarkPage(
 }
 
 /**
+ * Count total bookmarks and per-category breakdown.
+ *
+ * Returns accurate counts in a single IDB scan without holding all records
+ * in React state.  Used by the side panel to populate category pill counts
+ * immediately on open, independent of cursor-based pagination.
+ */
+export async function getBookmarkCounts(): Promise<Result<{
+    all: number;
+    tool: number;
+    security: number;
+    technique: number;
+    launch: number;
+    research: number;
+    opinion: number;
+    commerce: number;
+    other: number;
+}>> {
+    try {
+        const db = await openDb();
+        const all = await db.getAll("bookmarks");
+        const counts = {
+            all: all.length,
+            tool: 0,
+            security: 0,
+            technique: 0,
+            launch: 0,
+            research: 0,
+            opinion: 0,
+            commerce: 0,
+            other: 0,
+        };
+        for (const bm of all) {
+            const cat = bm.meta?.category;
+            if (cat === "tool") counts.tool++;
+            else if (cat === "security") counts.security++;
+            else if (cat === "technique") counts.technique++;
+            else if (cat === "launch") counts.launch++;
+            else if (cat === "research") counts.research++;
+            else if (cat === "opinion") counts.opinion++;
+            else if (cat === "commerce") counts.commerce++;
+            else counts.other++;
+        }
+        return ok(counts);
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+    }
+}
+
+/**
  * Close the current DB connection and clear the cached instance.
  *
  * Use this in tests to reset state between test runs, or if the DB version

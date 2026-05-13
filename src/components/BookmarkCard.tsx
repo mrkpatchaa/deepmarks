@@ -12,15 +12,17 @@ import { domainInitial, isSafeUrl } from "../lib/bookmarks/url";
 
 export interface BookmarkCardProps {
   bookmark: BookmarkNode;
+  onClassify?: (bookmark: BookmarkNode) => void;
 }
 
-export function BookmarkCard({ bookmark }: BookmarkCardProps) {
+export function BookmarkCard({ bookmark, onClassify }: BookmarkCardProps) {
   const { title, url } = bookmark;
   const initial = domainInitial(url);
   const safe = isSafeUrl(url);
+  const categoryBadge = bookmark.meta?.category;
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800">
+    <div className="flex items-start gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 group">
       {/* Domain-initial letter badge — no remote image, no network request */}
       <span
         aria-hidden="true"
@@ -52,6 +54,23 @@ export function BookmarkCard({ bookmark }: BookmarkCardProps) {
             </span>
           )
         )}
+
+        <div className="mt-1 flex items-center gap-2">
+          {categoryBadge !== undefined ? (
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium capitalize text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              {categoryBadge}
+            </span>
+          ) : null}
+          {onClassify !== undefined && url !== undefined && safe && (
+            <button
+              type="button"
+              onClick={() => { onClassify(bookmark); }}
+              className="rounded px-2 py-0.5 text-xs text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-300 transition-opacity"
+            >
+              Classify
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

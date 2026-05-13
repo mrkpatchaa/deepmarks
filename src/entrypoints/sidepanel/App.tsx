@@ -25,19 +25,28 @@
  *   - Wiki markdown rendered with skipHtml + rehype-sanitize.
  *   - Export requires explicit user gesture (button click), uses File System Access API.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getBookmarkPage, getAllBookmarks } from "../../lib/storage/db";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getBookmarkPage, getAllBookmarks, getBookmarkCounts } from "../../lib/storage/db";
 import { BookmarkList } from "../../components/BookmarkList";
 import { SearchBar } from "../../components/SearchBar";
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { WikiView } from "../../components/WikiView";
+import { ClassifyPanel } from "../../components/ClassifyPanel";
+import type { ClassifyResult } from "../../components/ClassifyPanel";
 import { compileWiki } from "../../lib/wiki/compile";
 import { saveWikiFile } from "../../lib/wiki/export";
 import { exportJSON } from "../../lib/agent/export";
+import { classifyAll } from "../../lib/classify/batch";
+import type { ClassifyAllProgress } from "../../lib/classify/batch";
 import type { FilterCategory, CategoryCounts } from "../../components/CategoryFilter";
-import type { BookmarkNode, SearchResult } from "../../lib/bookmarks/types";
+import type { BookmarkNode, SearchResult, Category, BookmarkMeta } from "../../lib/bookmarks/types";
 
 const PAGE_SIZE = 200;
+
+const DEFAULT_COUNTS: CategoryCounts = {
+  all: 0, tool: 0, security: 0, technique: 0,
+  launch: 0, research: 0, opinion: 0, commerce: 0, other: 0,
+};
 
 type TabId = "bookmarks" | "wiki";
 
@@ -57,11 +66,24 @@ export default function App() {
   const [wikiMarkdown, setWikiMarkdown] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [daemonReady, setDaemonReady] = useState<boolean | null>(null);
+  const [selectedBookmark, setSelectedBookmark] = useState<BookmarkNode | null>(null);
+  const [classifyAllState, setClassifyAllState] = useState<ClassifyAllProgress & { running: boolean } | null>(null);
+  const classifyAllAbort = useRef<AbortController | null>(null);
+  const [categoryCounts, setCategoryCounts] = useState<CategoryCounts>(DEFAULT_COUNTS);
   const loadState = useRef<LoadState>({
     lastKey: undefined,
     hasMore: true,
     active: false,
   });
+
+  const loadCounts = useCallback((): void => {
+    void (async () => {
+      const result = await getBookmarkCounts();
+      if (result.ok) {
+        setCategoryCounts(result.value);
+      }
+    })();
+  }, []);
 
   const loadPage = useCallback((): void => {
     const state = loadState.current;
@@ -86,11 +108,12 @@ export default function App() {
     })();
   }, []);
 
-  // Load first page on mount.
+  // Load first page + accurate counts on mount.
   useEffect(() => {
     loadPage();
+    loadCounts();
     setInitialLoading(false);
-  }, [loadPage]);
+  }, [loadPage, loadCounts]);
 
   // Check daemon status on mount (lazy — doesn't connect; background just reads flag).
   useEffect(() => {
@@ -160,25 +183,69 @@ export default function App() {
     })();
   }, []);
 
-  // Category counts derived from the full allBookmarks list (not filtered).
-  const categoryCounts: CategoryCounts = useMemo(() => {
-    const counts: CategoryCounts = {
-      all: allBookmarks.length,
-      tool: 0,
-      security: 0,
-      technique: 0,
-      launch: 0,
-      research: 0,
-      opinion: 0,
-      commerce: 0,
-      other: 0,
+  // Classify All — batch-classify every unclassified bookmark.
+  const handleClassifyAll = useCallback((): void => {
+    if (classifyAllState?.running) return;
+    const abort = new AbortController();
+    classifyAllAbort.current = abort;
+    setClassifyAllState({ running: true, done: 0, total: 0, failed: 0 });
+    void (async () => {
+      // Load the full bookmark set from IDB (may be larger than what's paged in).
+      const result = await getAllBookmarks();
+      if (!result.ok || abort.signal.aborted) {
+        setClassifyAllState(null);
+        return;
+      }
+      await classifyAll(
+        result.value,
+        "openai", // router falls back to regex if no BYOK key is set
+        (progress) => {
+          setClassifyAllState({ running: true, ...progress });
+        },
+        abort.signal,
+      );
+      // Reload all bookmarks and counts so badges and filter pills update.
+      const [refreshed, counts] = await Promise.all([getAllBookmarks(), getBookmarkCounts()]);
+      if (refreshed.ok) {
+        setAllBookmarks(refreshed.value);
+      }
+      if (counts.ok) {
+        setCategoryCounts(counts.value);
+      }
+      setClassifyAllState(null);
+      classifyAllAbort.current = null;
+    })();
+  }, [classifyAllState]);
+
+  const handleCancelClassifyAll = useCallback((): void => {
+    classifyAllAbort.current?.abort();
+  }, []);
+
+  // After classification, update the bookmark's meta in local state so the  // category badge appears immediately without a full reload.
+  const handleClassified = useCallback((result: ClassifyResult): void => {
+    if (selectedBookmark === null) return;
+    const updatedMeta: BookmarkMeta = {
+      category: result.category as Category,
+      tags: selectedBookmark.meta?.tags ?? [],
+      classifiedAt: Date.now(),
+      classifiedBy: result.usedEngine,
     };
-    for (const bm of allBookmarks) {
-      const cat = bm.meta?.category ?? "other";
-      counts[cat] = counts[cat] + 1;
+    const updated: BookmarkNode = { ...selectedBookmark, meta: updatedMeta };
+    setSelectedBookmark(updated);
+    setAllBookmarks((prev) =>
+      prev.map((bm) => (bm.id === updated.id ? updated : bm)),
+    );
+    // Delta-update pill counts — no IDB round-trip needed.
+    const oldCat: FilterCategory = selectedBookmark.meta?.category ?? "other";
+    const newCat: FilterCategory = result.category as Category;
+    if (oldCat !== newCat) {
+      setCategoryCounts((prev) => ({
+        ...prev,
+        [oldCat]: Math.max(0, prev[oldCat] - 1),
+        [newCat]: prev[newCat] + 1,
+      }));
     }
-    return counts;
-  }, [allBookmarks]);
+  }, [selectedBookmark]);
 
   // Base list: search results when searching, full allBookmarks otherwise.
   const baseList = searchResults ?? allBookmarks;
@@ -207,14 +274,64 @@ export default function App() {
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Deepmarks
           </h1>
-          <button
-            type="button"
-            onClick={handleExport}
-            className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-          >
-            Export for Agents
-          </button>
+          <div className="flex items-center gap-3">
+            {classifyAllState === null ? (
+              <button
+                type="button"
+                onClick={handleClassifyAll}
+                className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              >
+                Classify All
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {classifyAllState.done} / {classifyAllState.total === 0 ? "…" : String(classifyAllState.total)}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCancelClassifyAll}
+                  className="text-xs text-red-500 underline hover:text-red-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleExport}
+              className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+            >
+              Export
+            </button>
+            <button
+              type="button"
+              aria-label="Settings"
+              onClick={() => { chrome.runtime.openOptionsPage(); }}
+              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+              </svg>
+            </button>
+          </div>
         </div>
+        {/* Progress bar — visible during Classify All */}
+        {classifyAllState !== null && classifyAllState.total > 0 && (
+          <div className="mt-2">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+              <div
+                role="progressbar"
+                aria-valuenow={classifyAllState.done}
+                aria-valuemin={0}
+                aria-valuemax={classifyAllState.total}
+                className="h-full rounded-full bg-blue-500 transition-all duration-150"
+                style={{ width: `${Math.round((classifyAllState.done / classifyAllState.total) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
         {exportError !== null && (
           <p className="mt-1 text-xs text-red-500" role="alert">{exportError}</p>
         )}
@@ -272,6 +389,7 @@ export default function App() {
             <BookmarkList
               bookmarks={displayedBookmarks}
               onScrollNearEnd={searchResults === null ? loadPage : undefined}
+              onClassify={setSelectedBookmark}
             />
           </main>
         </>
@@ -281,6 +399,33 @@ export default function App() {
         <main className="flex-1 overflow-y-auto px-4 py-4">
           {wikiMarkdown !== null && <WikiView markdown={wikiMarkdown} />}
         </main>
+      )}
+
+      {/* Classify bottom sheet — appears when user clicks "Classify" on a card */}
+      {selectedBookmark !== null && (
+        <div
+          role="dialog"
+          aria-label={`Classify: ${selectedBookmark.title}`}
+          className="border-t border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+        >
+          <div className="flex items-center justify-between px-4 py-2">
+            <p className="truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              {selectedBookmark.title}
+            </p>
+            <button
+              type="button"
+              aria-label="Close classify panel"
+              onClick={() => { setSelectedBookmark(null); }}
+              className="ml-2 shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+            >
+              ✕
+            </button>
+          </div>
+          <ClassifyPanel
+            bookmark={selectedBookmark}
+            onClassified={handleClassified}
+          />
+        </div>
       )}
     </div>
   );

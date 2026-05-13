@@ -19,9 +19,10 @@ const NEAR_END_THRESHOLD = 5; // rows from bottom before triggering next-page lo
 export interface BookmarkListProps {
   bookmarks: BookmarkNode[];
   onScrollNearEnd?: () => void;
+  onClassify?: (bookmark: BookmarkNode) => void;
 }
 
-export function BookmarkList({ bookmarks, onScrollNearEnd }: BookmarkListProps) {
+export function BookmarkList({ bookmarks, onScrollNearEnd, onClassify }: BookmarkListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const virtualizer = useVirtualizer({
@@ -74,7 +75,7 @@ export function BookmarkList({ bookmarks, onScrollNearEnd }: BookmarkListProps) 
                 transform: "translateY(" + String(item.start) + "px)",
               }}
             >
-              <BookmarkCard bookmark={bookmark} />
+              <BookmarkCard bookmark={bookmark} onClassify={onClassify} />
             </div>
           );
         })}
