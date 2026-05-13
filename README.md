@@ -5,7 +5,10 @@
 ## Features
 
 - **Full-text search** across all Chrome bookmarks via FlexSearch (< 200ms on 10,000 bookmarks)
-- **Automatic classification** into 8 categories using offline regex rules or BYOK LLM (OpenAI / Anthropic / Gemini)
+- **Automatic classification** into built-in or custom categories using offline regex rules or BYOK LLM (OpenAI / Anthropic / Gemini / Ollama)
+- **Open/custom categories** — LLM engines may create new category slugs (e.g. `blockchain`, `gaming`) when a bookmark doesn't fit the 8 built-ins; the filter pill row updates dynamically
+- **Subject-matter domains** — LLM engines assign a short slug (e.g. `ai`, `web-dev`, `finance`) as a second dimension; shown as a violet badge on each bookmark and surfaced in the Stats dashboard
+- **Stats dashboard** — overview of total/classified bookmarks, category distribution bar chart, top sites bar chart, and subject-domain bar chart
 - **Wiki export** — generate a structured Markdown wiki from your bookmarks for use in AI context windows
 - **Agent integration** — companion MCP daemon lets Claude Code, Codex, and other agents query your bookmarks directly
 - **Zero network** in regex mode — not a single request leaves the browser
@@ -73,7 +76,7 @@ pnpm install
 pnpm dev          # WXT dev server with HMR
 pnpm typecheck    # TypeScript strict check
 pnpm lint         # ESLint (strictTypeChecked)
-pnpm test         # Vitest (167 unit tests)
+pnpm test         # Vitest (177 unit tests)
 pnpm build        # Production bundle
 pnpm zip          # Chrome .zip for submission
 ```

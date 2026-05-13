@@ -34,7 +34,8 @@ const BYOK_TIMEOUT_MS = 10_000;
 const SYSTEM_PROMPT =
     "You are a bookmark classifier. " +
     'Given a URL and title, respond with a JSON object with exactly two keys: "category" and "domain". ' +
-    '"category" must be exactly one of: tool, security, technique, launch, research, opinion, commerce, other. ' +
+    '"category" should be one of: tool, security, technique, launch, research, opinion, commerce, other. ' +
+    "If the bookmark clearly doesn't fit any of those, use a new short lowercase hyphenated slug (e.g. blockchain, gaming, science). " +
     '"domain" is the subject field — a short lowercase hyphenated slug (e.g. ai, finance, web-dev, devops, startups, design, science, security, gaming, media). ' +
     "Respond with only the JSON object — no markdown, no explanation.";
 
@@ -82,16 +83,12 @@ async function readBoolStorage(key: string): Promise<boolean> {
 
 // ── Zod schemas ───────────────────────────────────────────────────────────
 
-const CategorySchema = z.enum([
-    "tool",
-    "security",
-    "technique",
-    "launch",
-    "research",
-    "opinion",
-    "commerce",
-    "other",
-] as const);
+/** Validates category: lowercase letters, digits, hyphens; 1-50 chars. */
+const CategorySchema = z
+    .string()
+    .min(1)
+    .max(50)
+    .regex(/^[a-z][a-z0-9-]*$/, "Category must be a lowercase slug");
 
 /**
  * New JSON classify response format: {"category":"tool","domain":"ai"}.

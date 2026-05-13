@@ -1,29 +1,26 @@
 /**
  * CategoryFilter — Task 3.3
  *
- * Horizontal pill row showing all 8 categories + "All" with count badges.
+ * Horizontal pill row showing "All" + all categories present in counts.
  * - Active pill highlights; inactive pills with 0 count are dimmed.
  * - Categories with 0 bookmarks are shown dimmed, not hidden.
- * - Clicking any pill fires onSelect(cat).  The parent decides toggle logic
- *   (clicking the active pill again should pass "all" to reset).
+ * - Clicking any pill fires onSelect(cat). The parent decides toggle logic.
+ * - Dynamically handles built-in and custom LLM-generated categories.
  *
  * SECURITY: No remote resources. Counts are derived from BookmarkNode data
  * already stored in IndexedDB — never from untrusted external input.
  */
-import type { Category } from "../lib/bookmarks/types";
 
-export type FilterCategory = Category | "all";
+/** "all" plus any category slug string. */
+export type FilterCategory = string;
 
+/**
+ * Per-category counts keyed by slug, plus a mandatory "all" entry.
+ * Dynamic to support custom LLM-generated categories beyond the 8 built-ins.
+ */
 export interface CategoryCounts {
   all: number;
-  tool: number;
-  security: number;
-  technique: number;
-  launch: number;
-  research: number;
-  opinion: number;
-  commerce: number;
-  other: number;
+  [key: string]: number;
 }
 
 export interface CategoryFilterProps {
@@ -32,8 +29,8 @@ export interface CategoryFilterProps {
   onSelect: (cat: FilterCategory) => void;
 }
 
-const PILL_ORDER: FilterCategory[] = [
-  "all",
+/** Preferred display order for the 8 built-in categories. */
+const BUILTIN_ORDER = [
   "tool",
   "security",
   "technique",
@@ -42,9 +39,10 @@ const PILL_ORDER: FilterCategory[] = [
   "opinion",
   "commerce",
   "other",
-];
+] as const;
 
-const LABELS: Record<FilterCategory, string> = {
+/** Friendly labels for built-in categories. */
+const BUILTIN_LABELS: Record<string, string> = {
   all: "All",
   tool: "Tool",
   security: "Security",
@@ -56,11 +54,30 @@ const LABELS: Record<FilterCategory, string> = {
   other: "Other",
 };
 
+/** Capitalize a slug for display: "web-dev" → "Web-Dev". */
+function slugLabel(slug: string): string {
+  return (
+    BUILTIN_LABELS[slug] ??
+    slug
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join("-")
+  );
+}
+
 export function CategoryFilter({
   counts,
   selected,
   onSelect,
 }: CategoryFilterProps) {
+  // Build pill order: "all" first, then built-ins in canonical order (if
+  // present in counts), then any additional custom slugs sorted alphabetically.
+  const builtinSlugs = BUILTIN_ORDER.filter((cat) => cat in counts);
+  const customSlugs = Object.keys(counts)
+    .filter((cat) => cat !== "all" && !(BUILTIN_ORDER as readonly string[]).includes(cat))
+    .sort();
+  const pillOrder: FilterCategory[] = ["all", ...builtinSlugs, ...customSlugs];
+
   return (
     <div
       className="flex gap-1.5 overflow-x-auto px-4 py-2"
@@ -68,8 +85,8 @@ export function CategoryFilter({
       role="group"
       aria-label="Filter by category"
     >
-      {PILL_ORDER.map((cat) => {
-        const count = counts[cat];
+      {pillOrder.map((cat) => {
+        const count = counts[cat] ?? 0;
         const isActive = cat === selected;
         const isDimmed = cat !== "all" && count === 0;
 
@@ -89,7 +106,7 @@ export function CategoryFilter({
                   : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700",
             ].join(" ")}
           >
-            {LABELS[cat]}
+            {slugLabel(cat)}
             <span
               className={[
                 "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",

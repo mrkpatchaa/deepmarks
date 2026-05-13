@@ -156,41 +156,20 @@ export async function getBookmarkPage(
  * in React state.  Used by the side panel to populate category pill counts
  * immediately on open, independent of cursor-based pagination.
  */
-export async function getBookmarkCounts(): Promise<Result<{
-    all: number;
-    tool: number;
-    security: number;
-    technique: number;
-    launch: number;
-    research: number;
-    opinion: number;
-    commerce: number;
-    other: number;
-}>> {
+/**
+ * Dynamic per-category counts. Keys are lowercase category slugs (built-in or
+ * custom). Always includes "all" for the total bookmark count.
+ */
+export async function getBookmarkCounts(): Promise<
+    Result<{ all: number; [key: string]: number }>
+> {
     try {
         const db = await openDb();
         const all = await db.getAll("bookmarks");
-        const counts = {
-            all: all.length,
-            tool: 0,
-            security: 0,
-            technique: 0,
-            launch: 0,
-            research: 0,
-            opinion: 0,
-            commerce: 0,
-            other: 0,
-        };
+        const counts: { all: number; [key: string]: number } = { all: all.length };
         for (const bm of all) {
-            const cat = bm.meta?.category;
-            if (cat === "tool") counts.tool++;
-            else if (cat === "security") counts.security++;
-            else if (cat === "technique") counts.technique++;
-            else if (cat === "launch") counts.launch++;
-            else if (cat === "research") counts.research++;
-            else if (cat === "opinion") counts.opinion++;
-            else if (cat === "commerce") counts.commerce++;
-            else counts.other++;
+            const cat = bm.meta?.category ?? "other";
+            counts[cat] = (counts[cat] ?? 0) + 1;
         }
         return ok(counts);
     } catch (e) {

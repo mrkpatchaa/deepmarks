@@ -607,15 +607,28 @@ describe("classifyWithBYOK — OpenAI", () => {
     }
   });
 
-  it("returns error when response contains an unrecognised category", async () => {
+  it("accepts custom category slugs from LLM response", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(openAIResponse("banana")),
+      vi.fn().mockResolvedValue(openAIResponse("blockchain")),
+    );
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.category).toBe("blockchain");
+    }
+  });
+
+  it("returns error when response contains an invalid category format", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(openAIResponse("INVALID CATEGORY")),
     );
     const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain("banana");
+      // plain-text path normalises to lowercase before validation
+      expect(result.error).toContain("invalid category");
     }
   });
 

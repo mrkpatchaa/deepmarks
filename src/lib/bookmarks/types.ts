@@ -6,18 +6,14 @@
  */
 
 /**
- * The 8 built-in classification categories.
- * Stored in IndexedDB only — never written back to native bookmark titles.
+ * The built-in classification categories, plus any custom slugs an LLM may
+ * emit. Stored as a plain lowercase string in IndexedDB — never written back
+ * to native bookmark titles.
+ *
+ * Built-in values: tool | security | technique | launch | research | opinion | commerce | other
+ * Custom values: any short lowercase hyphenated slug (e.g. "blockchain", "gaming")
  */
-export type Category =
-    | "tool"
-    | "security"
-    | "technique"
-    | "launch"
-    | "research"
-    | "opinion"
-    | "commerce"
-    | "other";
+export type Category = string;
 
 /**
  * Which engine produced the classification.

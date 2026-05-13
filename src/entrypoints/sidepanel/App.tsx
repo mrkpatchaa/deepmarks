@@ -42,14 +42,11 @@ import type { ClassifyAllProgress } from "../../lib/classify/batch";
 import { getBestAvailableEngine } from "../../lib/classify/router";
 import type { BYOKEngine } from "../../lib/classify/byok";
 import type { FilterCategory, CategoryCounts } from "../../components/CategoryFilter";
-import type { BookmarkNode, SearchResult, Category, BookmarkMeta } from "../../lib/bookmarks/types";
+import type { BookmarkNode, SearchResult, BookmarkMeta } from "../../lib/bookmarks/types";
 
 const PAGE_SIZE = 200;
 
-const DEFAULT_COUNTS: CategoryCounts = {
-  all: 0, tool: 0, security: 0, technique: 0,
-  launch: 0, research: 0, opinion: 0, commerce: 0, other: 0,
-};
+const DEFAULT_COUNTS: CategoryCounts = { all: 0 };
 
 type TabId = "bookmarks" | "wiki" | "stats";
 
@@ -230,7 +227,7 @@ export default function App() {
   const handleClassified = useCallback((result: ClassifyResult): void => {
     if (selectedBookmark === null) return;
     const updatedMeta: BookmarkMeta = {
-      category: result.category as Category,
+      category: result.category,
       tags: selectedBookmark.meta?.tags ?? [],
       classifiedAt: Date.now(),
       classifiedBy: result.usedEngine,
@@ -242,7 +239,7 @@ export default function App() {
     );
     // Delta-update pill counts — no IDB round-trip needed.
     const oldCat: FilterCategory = selectedBookmark.meta?.category ?? "other";
-    const newCat: FilterCategory = result.category as Category;
+    const newCat: FilterCategory = result.category;
     if (oldCat !== newCat) {
       setCategoryCounts((prev) => ({
         ...prev,

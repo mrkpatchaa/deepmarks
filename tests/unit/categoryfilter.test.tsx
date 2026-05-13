@@ -164,4 +164,28 @@ describe("CategoryFilter", () => {
     setup();
     expect(screen.getByRole("group", { name: /Filter by category/i })).toBeInTheDocument();
   });
+
+  it("renders custom LLM-generated category slugs as capitalised pills", () => {
+    const counts: CategoryCounts = { all: 5, tool: 3, blockchain: 2 };
+    setup("all", counts, vi.fn());
+    // 3 pills: All, Tool, blockchain
+    expect(screen.getAllByRole("button")).toHaveLength(3);
+    // custom slug "blockchain" → label "Blockchain"
+    expect(
+      screen.getByRole("button", { name: /Blockchain/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("orders built-ins before custom slugs", () => {
+    const counts: CategoryCounts = { all: 5, tool: 3, zzzcustom: 1, security: 1 };
+    setup("all", counts, vi.fn());
+    const buttons = screen.getAllByRole("button");
+    const labels = buttons.map((b) => b.textContent?.trim() ?? "");
+    const toolIdx = labels.findIndex((l) => /^Tool/.test(l));
+    const secIdx = labels.findIndex((l) => /^Security/.test(l));
+    const customIdx = labels.findIndex((l) => /^Zzzcustom/.test(l));
+    // built-ins must come before custom slugs
+    expect(toolIdx).toBeLessThan(customIdx);
+    expect(secIdx).toBeLessThan(customIdx);
+  });
 });
