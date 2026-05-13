@@ -81,14 +81,15 @@ describe("Category type", () => {
 });
 
 describe("ClassifyEngine type", () => {
-    it("accepts all 4 valid engine values", () => {
+    it("accepts all 5 valid engine values", () => {
         const engines: ClassifyEngine[] = [
             "regex",
             "openai",
             "anthropic",
             "gemini",
+            "ollama",
         ];
-        expect(engines).toHaveLength(4);
+        expect(engines).toHaveLength(5);
         engines.forEach((e) => { expect(typeof e).toBe("string"); });
     });
 });

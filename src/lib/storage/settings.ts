@@ -21,6 +21,7 @@ export const BYOK_KEY: Record<BYOKEngine, string> = {
     openai: "byok_openai",
     anthropic: "byok_anthropic",
     gemini: "byok_gemini",
+    ollama: "byok_ollama_model",
 } as const;
 
 // ── Writes ────────────────────────────────────────────────────────────────

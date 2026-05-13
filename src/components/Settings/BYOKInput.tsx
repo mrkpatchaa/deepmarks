@@ -22,10 +22,11 @@ import {
   getConsent,
 } from "../../lib/storage/settings";
 
-const ENGINES: { value: BYOKEngine; label: string }[] = [
+const ENGINES: { value: BYOKEngine; label: string; isLocal?: boolean }[] = [
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic" },
   { value: "gemini", label: "Gemini" },
+  { value: "ollama", label: "Ollama (local)", isLocal: true },
 ];
 
 export function BYOKInput() {
@@ -35,6 +36,8 @@ export function BYOKInput() {
   const [hasKey, setHasKey] = useState(false);
   const [consent, setConsentState] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "removed">("idle");
+
+  const isLocal = selectedEngine === "ollama";
 
   // Refresh key-presence indicator whenever engine changes.
   useEffect(() => {
@@ -101,44 +104,50 @@ export function BYOKInput() {
         </select>
       </div>
 
-      {/* Current key status */}
+      {/* Current key/model status */}
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         {hasKey
-          ? "A key is saved for this provider."
-          : "No key saved for this provider."}
+          ? isLocal ? "Model configured." : "A key is saved for this provider."
+          : isLocal ? "No model set. Enter a model name below." : "No key saved for this provider."}
       </p>
 
-      {/* Consent checkbox — required before saving a key */}
-      <label className="flex items-start gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-        <input
-          type="checkbox"
-          checked={consent}
-          onChange={(e) => {
-            void handleConsentToggle(e.target.checked);
-          }}
-          className="mt-0.5"
-        />
-        <span>
-          I consent to sending bookmark URLs and titles to the selected AI
-          provider for classification. Keys are stored on this device only and
-          never synced.
-        </span>
-      </label>
+      {/* Consent checkbox — not needed for Ollama (data stays on device) */}
+      {!isLocal && (
+        <label className="flex items-start gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => {
+              void handleConsentToggle(e.target.checked);
+            }}
+            className="mt-0.5"
+          />
+          <span>
+            I consent to sending bookmark URLs and titles to the selected AI
+            provider for classification. Keys are stored on this device only and
+            never synced.
+          </span>
+        </label>
+      )}
+      {isLocal && (
+        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+          Ollama runs entirely on your device — no data leaves your machine.
+        </p>
+      )}
 
-      {/* Masked key field — type="password" prevents shoulder-surfing */}
+      {/* Masked key field / model name field */}
       <div className="flex flex-col gap-1">
         <label
           htmlFor="byok-key"
           className="text-xs font-medium text-zinc-600 dark:text-zinc-400"
         >
-          API Key
+          {isLocal ? "Model" : "API Key"}
         </label>
         <input
           id="byok-key"
-          type="password"
-          // autocomplete="off" prevents browser from offering to save the key
+          type={isLocal ? "text" : "password"}
           autoComplete="off"
-          placeholder="Paste your API key…"
+          placeholder={isLocal ? "e.g. llama3.2" : "Paste your API key…"}
           value={keyInput}
           onChange={(e) => { setKeyInput(e.target.value); }}
           className="w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
@@ -150,10 +159,10 @@ export function BYOKInput() {
         <button
           type="button"
           onClick={() => { void handleSave(); }}
-          disabled={keyInput === "" || !consent}
+          disabled={keyInput === "" || (!isLocal && !consent)}
           className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Save
+          {isLocal ? "Set model" : "Save"}
         </button>
         {hasKey && (
           <button

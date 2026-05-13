@@ -14,12 +14,14 @@ interface EngineStatus {
   engine: BYOKEngine;
   label: string;
   hasKey: boolean;
+  isLocal: boolean;
 }
 
-const ENGINES: { value: BYOKEngine; label: string }[] = [
+const ENGINES: { value: BYOKEngine; label: string; isLocal?: boolean }[] = [
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic" },
   { value: "gemini", label: "Gemini" },
+  { value: "ollama", label: "Ollama", isLocal: true },
 ];
 
 export function ClassifyEngineStatus() {
@@ -37,6 +39,7 @@ export function ClassifyEngineStatus() {
         engine: e.value,
         label: e.label,
         hasKey: keyFlags[i] ?? false,
+        isLocal: e.isLocal === true,
       })),
     );
   }
@@ -72,7 +75,8 @@ export function ClassifyEngineStatus() {
 
       <ul className="space-y-2">
         {statuses.map((s) => {
-          const active = consent && s.hasKey;
+          // Ollama is local — no consent needed for activation.
+          const active = (s.isLocal || consent) && s.hasKey;
           return (
             <li key={s.engine} className="flex items-center gap-2">
               {/* Status dot */}
@@ -81,7 +85,7 @@ export function ClassifyEngineStatus() {
                 className={[
                   "h-2 w-2 rounded-full",
                   active
-                    ? "bg-green-500"
+                    ? s.isLocal ? "bg-emerald-500" : "bg-green-500"
                     : "bg-zinc-300 dark:bg-zinc-600",
                 ].join(" ")}
               />
@@ -92,11 +96,15 @@ export function ClassifyEngineStatus() {
                 className={[
                   "ml-auto rounded-full px-2 py-0.5 text-xs font-medium",
                   active
-                    ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                    ? s.isLocal
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"
+                      : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
                     : "bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400",
                 ].join(" ")}
               >
-                {active ? "Active" : s.hasKey ? "No consent" : "Not configured"}
+                {active
+                  ? s.isLocal ? "Running locally" : "Active"
+                  : s.hasKey && !s.isLocal ? "No consent" : "Not configured"}
               </span>
             </li>
           );

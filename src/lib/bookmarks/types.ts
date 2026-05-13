@@ -23,7 +23,7 @@ export type Category =
  * Which engine produced the classification.
  * 'regex' is always available; the others require a BYOK key.
  */
-export type ClassifyEngine = "regex" | "openai" | "anthropic" | "gemini";
+export type ClassifyEngine = "regex" | "openai" | "anthropic" | "gemini" | "ollama";
 
 /**
  * Classification metadata attached to a bookmark.

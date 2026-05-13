@@ -30,11 +30,12 @@ const SYSTEM_PROMPT =
     "tool, security, technique, launch, research, opinion, commerce, other. " +
     "Respond with only the category name — no punctuation, no explanation.";
 
-/** chrome.storage.local key per engine that stores the API key. */
+/** chrome.storage.local key per engine that stores the API key (or model name for Ollama). */
 const STORAGE_KEY: Record<BYOKEngine, string> = {
     openai: "byok_openai",
     anthropic: "byok_anthropic",
     gemini: "byok_gemini",
+    ollama: "byok_ollama_model",
 } as const;
 
 /** chrome.storage.local key for the one-time consent flag. */
@@ -127,6 +128,12 @@ function extractText(engine: BYOKEngine, body: unknown): string | null {
             if (!parsed.success) return null;
             return parsed.data.candidates[0]?.content.parts[0]?.text.trim() ?? null;
         }
+        case "ollama": {
+            // Ollama's /v1/chat/completions endpoint is OpenAI-compatible.
+            const parsed = OpenAIResponseSchema.safeParse(body);
+            if (!parsed.success) return null;
+            return parsed.data.choices[0]?.message.content.trim() ?? null;
+        }
     }
 }
 
@@ -190,6 +197,22 @@ function buildFetchParams(
                     generationConfig: { maxOutputTokens: 20, temperature: 0 },
                 },
             };
+        case "ollama":
+            // apiKey is the model name for Ollama (stored in byok_ollama_model).
+            // Uses the OpenAI-compatible endpoint — no Authorization header needed.
+            return {
+                apiUrl: "http://localhost:11434/v1/chat/completions",
+                headers: { "Content-Type": "application/json" },
+                body: {
+                    model: apiKey,
+                    messages: [
+                        { role: "system", content: SYSTEM_PROMPT },
+                        { role: "user", content: userMessage },
+                    ],
+                    max_tokens: 20,
+                    temperature: 0,
+                },
+            };
     }
 }
 
@@ -200,16 +223,18 @@ async function doClassify(
     title: string,
     engine: BYOKEngine,
 ): Promise<Result<Category>> {
-    // 1. Consent check — must be given before any data leaves the device.
-    const hasConsent = await readBoolStorage(CONSENT_KEY);
-    if (!hasConsent) {
-        return err("Consent required: byok/consent");
+    // 1. Consent check — Ollama runs locally so no consent is required.
+    if (engine !== "ollama") {
+        const hasConsent = await readBoolStorage(CONSENT_KEY);
+        if (!hasConsent) {
+            return err("Consent required: byok/consent");
+        }
     }
 
-    // 2. API key check.
+    // 2. API key / model name check.
     const apiKey = await readStringStorage(STORAGE_KEY[engine]);
     if (apiKey === undefined || apiKey === "") {
-        return err("No API key configured");
+        return err(engine === "ollama" ? "No Ollama model configured" : "No API key configured");
     }
 
     // 3. Build the user message. URL and title go into the *user* message only

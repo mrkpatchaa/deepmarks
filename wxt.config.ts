@@ -13,7 +13,8 @@ export default defineConfig({
             "Local-first AI bookmark manager — search, classify, and query your bookmarks with AI, zero data leaves your machine",
         version: "0.1.0",
         permissions: ["bookmarks", "storage", "sidePanel", "nativeMessaging"],
-        // No host_permissions — extension never touches web pages
+        // localhost:11434 is the Ollama API endpoint (local LLM, no data leaves the device)
+        host_permissions: ["http://localhost:11434/*"],
         content_security_policy: {
             extension_pages: "script-src 'self'; object-src 'none';",
         },

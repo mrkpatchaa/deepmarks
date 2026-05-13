@@ -33,13 +33,17 @@ const STORAGE_KEY: Record<BYOKEngine, string> = {
     openai: "byok_openai",
     anthropic: "byok_anthropic",
     gemini: "byok_gemini",
+    ollama: "byok_ollama_model",
 } as const;
 
 async function isByokAvailable(engine: BYOKEngine): Promise<boolean> {
     try {
-        const consentRaw = await chrome.storage.local.get(CONSENT_KEY);
-        const consent = (consentRaw as Record<string, unknown>)[CONSENT_KEY];
-        if (consent !== true) return false;
+        // Ollama runs locally — no consent required.
+        if (engine !== "ollama") {
+            const consentRaw = await chrome.storage.local.get(CONSENT_KEY);
+            const consent = (consentRaw as Record<string, unknown>)[CONSENT_KEY];
+            if (consent !== true) return false;
+        }
 
         const keyRaw = await chrome.storage.local.get(STORAGE_KEY[engine]);
         const key = (keyRaw as Record<string, unknown>)[STORAGE_KEY[engine]];
