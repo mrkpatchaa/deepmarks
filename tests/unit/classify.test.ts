@@ -1,15 +1,24 @@
 /**
- * Tests for the regex classifier — Task 4.1
+ * Tests for the regex classifier (Task 4.1) and BYOK classifier (Task 4.2)
  *
- * Covers:
+ * Regex covers:
  *  1. Spec-required mappings (github.com→tool, arxiv.org→research, etc.)
  *  2. 50-URL fixture with ≥ 80% accuracy assertion
  *  3. Edge cases (invalid URL, empty strings, fallback to "other")
+ *
+ * BYOK covers:
+ *  4. Consent gate — no request without consent
+ *  5. Missing API key — graceful error
+ *  6. Valid OpenAI / Anthropic / Gemini responses → correct category
+ *  7. HTTP error / invalid JSON / unrecognised category → graceful errors
+ *  8. AbortError (timeout) + network error → graceful errors
+ *  9. Concurrent calls are queued, not dropped
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Category } from "../../src/lib/bookmarks/types";
 import { classifyByRegex } from "../../src/lib/classify/regex";
 import { ALL_CATEGORIES } from "../../src/lib/classify/categories";
+import { classifyWithBYOK, CONSENT_KEY } from "../../src/lib/classify/byok";
 
 // ── 50-URL classification fixture ─────────────────────────────────────────
 
@@ -416,5 +425,298 @@ describe("classifyByRegex — 50-URL fixture", () => {
         `URL: ${entry.url} (expected: ${entry.expected})`,
       ).toBe(entry.expected);
     }
+  });
+});
+
+// ── BYOK classifier — helpers ─────────────────────────────────────────────
+
+const TEST_URL = "https://github.com/owner/repo";
+const TEST_TITLE = "Owner / Repo — GitHub";
+const FAKE_OPENAI_KEY = "sk-test-openai-key";
+const FAKE_ANTHROPIC_KEY = "ant-test-anthropic-key";
+const FAKE_GEMINI_KEY = "test-gemini-api-key";
+
+/** Mock a successful OpenAI-shaped fetch response. */
+function openAIResponse(category: string): Response {
+  return {
+    ok: true,
+    status: 200,
+    text: () =>
+      Promise.resolve(
+        JSON.stringify({ choices: [{ message: { content: category } }] }),
+      ),
+  } as unknown as Response;
+}
+
+/** Mock a successful Anthropic-shaped fetch response. */
+function anthropicResponse(category: string): Response {
+  return {
+    ok: true,
+    status: 200,
+    text: () =>
+      Promise.resolve(
+        JSON.stringify({ content: [{ type: "text", text: category }] }),
+      ),
+  } as unknown as Response;
+}
+
+/** Mock a successful Gemini-shaped fetch response. */
+function geminiResponse(category: string): Response {
+  return {
+    ok: true,
+    status: 200,
+    text: () =>
+      Promise.resolve(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ text: category }] } }],
+        }),
+      ),
+  } as unknown as Response;
+}
+
+/** HTTP error response. */
+function httpErrorResponse(status: number): Response {
+  return { ok: false, status } as unknown as Response;
+}
+
+/** Configure chrome.storage.local.get mock with a fixed storage state. */
+function setupStorage(opts: {
+  consent: boolean;
+  openaiKey?: string;
+  anthropicKey?: string;
+  geminiKey?: string;
+}): void {
+  const store: Record<string, unknown> = {
+    [CONSENT_KEY]: opts.consent,
+    byok_openai: opts.openaiKey,
+    byok_anthropic: opts.anthropicKey,
+    byok_gemini: opts.geminiKey,
+  };
+  (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockImplementation(
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    (key: unknown) =>
+      Promise.resolve({ [key as string]: store[key as string] }),
+  );
+}
+
+// ── BYOK — consent gate ───────────────────────────────────────────────────
+
+describe("classifyWithBYOK — consent gate", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns consent-required error when byok_consent is not set", async () => {
+    setupStorage({ consent: false, openaiKey: FAKE_OPENAI_KEY });
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Consent required: byok/consent");
+    }
+  });
+});
+
+// ── BYOK — missing API key ────────────────────────────────────────────────
+
+describe("classifyWithBYOK — missing API key", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns no-key error when API key is not configured", async () => {
+    setupStorage({ consent: true }); // no key provided
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("No API key configured");
+    }
+  });
+});
+
+// ── BYOK — OpenAI engine ──────────────────────────────────────────────────
+
+describe("classifyWithBYOK — OpenAI", () => {
+  beforeEach(() => {
+    setupStorage({ consent: true, openaiKey: FAKE_OPENAI_KEY });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the category from a valid OpenAI response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(openAIResponse("tool")));
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result).toEqual({ ok: true, value: "tool" });
+  });
+
+  it("returns error on HTTP 401", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(httpErrorResponse(401)),
+    );
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("401");
+    }
+  });
+
+  it("returns error when response JSON is malformed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve("not json {{{"),
+      }),
+    );
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Invalid JSON in response");
+    }
+  });
+
+  it("returns error when response has unexpected shape", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ unexpected: "shape" })),
+      }),
+    );
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Unexpected response format");
+    }
+  });
+
+  it("returns error when response contains an unrecognised category", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(openAIResponse("banana")),
+    );
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("banana");
+    }
+  });
+
+  it("API key is never exposed in error messages", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(httpErrorResponse(403)),
+    );
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    if (!result.ok) {
+      expect(result.error).not.toContain(FAKE_OPENAI_KEY);
+    }
+  });
+});
+
+// ── BYOK — Anthropic engine ───────────────────────────────────────────────
+
+describe("classifyWithBYOK — Anthropic", () => {
+  beforeEach(() => {
+    setupStorage({ consent: true, anthropicKey: FAKE_ANTHROPIC_KEY });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the category from a valid Anthropic response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(anthropicResponse("security")),
+    );
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "anthropic");
+    expect(result).toEqual({ ok: true, value: "security" });
+  });
+});
+
+// ── BYOK — Gemini engine ──────────────────────────────────────────────────
+
+describe("classifyWithBYOK — Gemini", () => {
+  beforeEach(() => {
+    setupStorage({ consent: true, geminiKey: FAKE_GEMINI_KEY });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the category from a valid Gemini response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(geminiResponse("research")),
+    );
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "gemini");
+    expect(result).toEqual({ ok: true, value: "research" });
+  });
+});
+
+// ── BYOK — network errors ─────────────────────────────────────────────────
+
+describe("classifyWithBYOK — network errors", () => {
+  beforeEach(() => {
+    setupStorage({ consent: true, openaiKey: FAKE_OPENAI_KEY });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns timeout error when fetch throws AbortError", async () => {
+    const abortErr = new Error("The operation was aborted.");
+    abortErr.name = "AbortError";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abortErr));
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result).toEqual({ ok: false, error: "Request timed out" });
+  });
+
+  it("returns network error when fetch throws a generic error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("Failed to fetch")),
+    );
+    const result = await classifyWithBYOK(TEST_URL, TEST_TITLE, "openai");
+    expect(result).toEqual({ ok: false, error: "Network error" });
+  });
+});
+
+// ── BYOK — concurrency queue ──────────────────────────────────────────────
+
+describe("classifyWithBYOK — concurrency queue", () => {
+  beforeEach(() => {
+    setupStorage({ consent: true, openaiKey: FAKE_OPENAI_KEY });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("processes concurrent calls and does not drop any", async () => {
+    // Both calls should complete — queue ensures serialisation, not dropping.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce(openAIResponse("tool"))
+        .mockResolvedValueOnce(openAIResponse("research")),
+    );
+
+    const [r1, r2] = await Promise.all([
+      classifyWithBYOK("https://github.com/a", "A", "openai"),
+      classifyWithBYOK("https://arxiv.org/b", "B", "openai"),
+    ]);
+
+    expect(r1).toEqual({ ok: true, value: "tool" });
+    expect(r2).toEqual({ ok: true, value: "research" });
+    // fetch was called exactly twice — second call was queued, not dropped
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
   });
 });
