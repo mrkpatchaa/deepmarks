@@ -39,11 +39,19 @@ const chromeMock = {
       get: vi.fn(),
       set: vi.fn(),
       remove: vi.fn(),
+      onChanged: {
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      },
     },
     sync: {
       get: vi.fn(),
       set: vi.fn(),
       remove: vi.fn(),
+      onChanged: {
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      },
     },
   },
   runtime: {

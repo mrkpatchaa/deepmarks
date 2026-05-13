@@ -23,13 +23,20 @@ import {
   hasBYOKKey,
   setConsent,
   getConsent,
+  getCustomCategories,
+  saveCustomCategories,
+  restoreDefaultCategories,
 } from "../../src/lib/storage/settings";
 import { BYOKInput } from "../../src/components/Settings/BYOKInput";
+import { CategoryEditor } from "../../src/components/Settings/CategoryEditor";
+import { ALL_CATEGORIES } from "../../src/lib/classify/categories";
 
 // ── Setup chrome.storage mock ──────────────────────────────────────────────
 
 /** In-memory store that mimics chrome.storage.local */
 let store: Record<string, unknown> = {};
+/** In-memory store that mimics chrome.storage.sync */
+let syncStore: Record<string, unknown> = {};
 
 /** Remove a key from store without triggering no-dynamic-delete. */
 function storeRemove(key: string): void {
@@ -57,6 +64,18 @@ function setupStorageMock() {
       return Promise.resolve();
     },
   );
+  // chrome.storage.sync mocks
+  (chrome.storage.sync.get as ReturnType<typeof vi.fn>).mockImplementation(
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    (key: unknown) => Promise.resolve({ [key as string]: syncStore[key as string] }),
+  );
+  (chrome.storage.sync.set as ReturnType<typeof vi.fn>).mockImplementation(
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    (items: unknown) => {
+      Object.assign(syncStore, items as Record<string, unknown>);
+      return Promise.resolve();
+    },
+  );
 }
 
 // ── Settings helpers ───────────────────────────────────────────────────────
@@ -64,6 +83,7 @@ function setupStorageMock() {
 describe("saveBYOKKey", () => {
   beforeEach(() => {
     store = {};
+    syncStore = {};
     setupStorageMock();
   });
   afterEach(() => { vi.clearAllMocks(); });
@@ -230,5 +250,225 @@ describe("BYOKInput — provider selector", () => {
 
     // Verify store has the correct key
     expect(store.byok_anthropic).toBe("ant-key");
+  });
+});
+
+// ── Task 5.2: custom category helpers ─────────────────────────────────────
+
+describe("getCustomCategories", () => {
+  beforeEach(() => {
+    store = {};
+    syncStore = {};
+    setupStorageMock();
+  });
+  afterEach(() => { vi.clearAllMocks(); });
+
+  it("returns ALL_CATEGORIES by default when no sync value set", async () => {
+    const cats = await getCustomCategories();
+    expect(cats).toEqual([...ALL_CATEGORIES]);
+  });
+
+  it("returns stored categories when set in sync", async () => {
+    syncStore.custom_categories = ["design", "news"];
+    const cats = await getCustomCategories();
+    expect(cats).toEqual(["design", "news"]);
+  });
+});
+
+describe("saveCustomCategories", () => {
+  beforeEach(() => {
+    store = {};
+    syncStore = {};
+    setupStorageMock();
+  });
+  afterEach(() => { vi.clearAllMocks(); });
+
+  it("saves valid categories to chrome.storage.sync", async () => {
+    const result = await saveCustomCategories(["design", "news"]);
+    expect(result.ok).toBe(true);
+    expect(syncStore.custom_categories).toEqual(["design", "news"]);
+  });
+
+  it("returns error for empty array", async () => {
+    const result = await saveCustomCategories([]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(typeof result.error).toBe("string");
+    }
+  });
+
+  it("returns error when a name exceeds 32 chars", async () => {
+    const longName = "a".repeat(33);
+    const result = await saveCustomCategories([longName]);
+    expect(result.ok).toBe(false);
+  });
+
+  it("returns error when a name contains special chars", async () => {
+    const result = await saveCustomCategories(["bad<name>"]);
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts names with letters, digits, and spaces", async () => {
+    const result = await saveCustomCategories(["deep learning 101"]);
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("restoreDefaultCategories", () => {
+  beforeEach(() => {
+    store = {};
+    syncStore = { custom_categories: ["custom1", "custom2"] };
+    setupStorageMock();
+  });
+  afterEach(() => { vi.clearAllMocks(); });
+
+  it("resets sync storage to ALL_CATEGORIES", async () => {
+    await restoreDefaultCategories();
+    expect(syncStore.custom_categories).toEqual([...ALL_CATEGORIES]);
+  });
+});
+
+// ── Task 5.2: CategoryEditor component ────────────────────────────────────
+
+describe("CategoryEditor — default rendering", () => {
+  beforeEach(() => {
+    store = {};
+    syncStore = {};
+    setupStorageMock();
+  });
+  afterEach(() => { vi.clearAllMocks(); });
+
+  it("renders all 8 default categories on initial load", async () => {
+    render(<CategoryEditor />);
+    await act(async () => { await Promise.resolve(); });
+    for (const cat of ALL_CATEGORIES) {
+      expect(screen.getByText(new RegExp(cat, "i"))).toBeDefined();
+    }
+  });
+
+  it("renders Add Category input and button", async () => {
+    render(<CategoryEditor />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Add Category")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Add" })).toBeDefined();
+  });
+
+  it("renders Restore Defaults button", async () => {
+    render(<CategoryEditor />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByRole("button", { name: "Restore Defaults" })).toBeDefined();
+  });
+});
+
+describe("CategoryEditor — adding a category", () => {
+  beforeEach(() => {
+    store = {};
+    syncStore = {};
+    setupStorageMock();
+  });
+  afterEach(() => { vi.clearAllMocks(); });
+
+  it("adds a new category and saves to sync storage", async () => {
+    render(<CategoryEditor />);
+    await act(async () => { await Promise.resolve(); });
+
+    const input = screen.getByLabelText("Add Category");
+    fireEvent.change(input, { target: { value: "design" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      await Promise.resolve();
+    });
+
+    expect(syncStore.custom_categories).toContain("design");
+    expect((input as HTMLInputElement).value).toBe("");
+  });
+
+  it("shows validation error for empty name", async () => {
+    render(<CategoryEditor />);
+    await act(async () => { await Promise.resolve(); });
+
+    // Enter a value that looks non-empty but is only spaces
+    // The button won't be disabled but validation should catch it
+    fireEvent.change(screen.getByLabelText("Add Category"), { target: { value: "a".repeat(33) } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("alert")).toBeDefined();
+  });
+
+  it("shows validation error for name with special chars", async () => {
+    render(<CategoryEditor />);
+    await act(async () => { await Promise.resolve(); });
+
+    fireEvent.change(screen.getByLabelText("Add Category"), { target: { value: "bad<>" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("alert")).toBeDefined();
+  });
+
+  it("shows error when adding duplicate category", async () => {
+    render(<CategoryEditor />);
+    await act(async () => { await Promise.resolve(); });
+
+    fireEvent.change(screen.getByLabelText("Add Category"), { target: { value: "tool" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("alert")).toBeDefined();
+  });
+});
+
+describe("CategoryEditor — deleting a category", () => {
+  beforeEach(() => {
+    store = {};
+    syncStore = {};
+    setupStorageMock();
+  });
+  afterEach(() => { vi.clearAllMocks(); });
+
+  it("removes a category from list and sync storage", async () => {
+    render(<CategoryEditor />);
+    await act(async () => { await Promise.resolve(); });
+
+    const deleteBtn = screen.getByRole("button", { name: "Delete category tool" });
+    await act(async () => {
+      fireEvent.click(deleteBtn);
+      await Promise.resolve();
+    });
+
+    expect((syncStore.custom_categories as string[]).includes("tool")).toBe(false);
+  });
+});
+
+describe("CategoryEditor — restore defaults", () => {
+  beforeEach(() => {
+    store = {};
+    syncStore = { custom_categories: ["custom1"] };
+    setupStorageMock();
+  });
+  afterEach(() => { vi.clearAllMocks(); });
+
+  it("clicking Restore Defaults resets to ALL_CATEGORIES", async () => {
+    render(<CategoryEditor />);
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Restore Defaults" }));
+      await Promise.resolve();
+    });
+
+    expect(syncStore.custom_categories).toEqual([...ALL_CATEGORIES]);
+    // All 8 default categories appear on screen
+    for (const cat of ALL_CATEGORIES) {
+      expect(screen.getByText(new RegExp(cat, "i"))).toBeDefined();
+    }
   });
 });

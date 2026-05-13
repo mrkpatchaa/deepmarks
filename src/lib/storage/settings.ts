@@ -1,17 +1,19 @@
 /**
- * settings.ts — Task 5.1
+ * settings.ts — Tasks 5.1 + 5.2
  *
- * Typed read/write helpers for BYOK keys and consent flag in
- * `chrome.storage.local`. Keys are NEVER written to `chrome.storage.sync`.
+ * Typed read/write helpers for:
+ *   - BYOK keys and consent flag in `chrome.storage.local` (device-only)
+ *   - Custom category list in `chrome.storage.sync` (synced across devices)
  *
  * SECURITY:
  *   - API keys stored only in `chrome.storage.local` (device-scoped, not synced).
- *   - Key values are never passed as function arguments outside this module —
- *     callers only receive presence/absence booleans where possible.
+ *   - Key values are never passed as function arguments outside this module.
  *   - All storage keys are constants defined here to prevent typos.
  */
+import { z } from "zod";
 import type { BYOKEngine } from "../classify/byok";
 import { CONSENT_KEY } from "../classify/byok";
+import { ALL_CATEGORIES } from "../classify/categories";
 
 // ── Storage key constants ────────────────────────────────────────────────
 
@@ -59,3 +61,58 @@ export async function getConsent(): Promise<boolean> {
   const val = (raw as Record<string, unknown>)[CONSENT_KEY];
   return val === true;
 }
+
+// ── Custom categories (chrome.storage.sync) ───────────────────────────────
+
+const CUSTOM_CATEGORIES_KEY = "custom_categories";
+
+/** Zod schema: an array of non-empty, max-32-char, alphanumeric+spaces strings. */
+const CategoryNameSchema = z
+  .string()
+  .min(1, "Category name cannot be empty")
+  .max(32, "Category name must be ≤ 32 characters")
+  .regex(/^[a-zA-Z0-9 ]+$/, "Category name may only contain letters, numbers, and spaces");
+
+const CustomCategoriesSchema = z.array(CategoryNameSchema);
+
+export type { z };
+
+/**
+ * Read the custom category list from `chrome.storage.sync`.
+ * Returns the 8 defaults if no custom list is stored.
+ */
+export async function getCustomCategories(): Promise<string[]> {
+  const raw = await chrome.storage.sync.get(CUSTOM_CATEGORIES_KEY);
+  const val = (raw as Record<string, unknown>)[CUSTOM_CATEGORIES_KEY];
+  const parsed = CustomCategoriesSchema.safeParse(val);
+  if (!parsed.success || parsed.data.length === 0) {
+    return [...ALL_CATEGORIES];
+  }
+  return parsed.data;
+}
+
+/**
+ * Save the custom category list to `chrome.storage.sync`.
+ * Validates with Zod before writing. Returns an error string on failure.
+ */
+export async function saveCustomCategories(
+  categories: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const parsed = CustomCategoriesSchema.safeParse(categories);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { ok: false, error: first?.message ?? "Invalid categories" };
+  }
+  if (parsed.data.length === 0) {
+    return { ok: false, error: "Category list cannot be empty" };
+  }
+  await chrome.storage.sync.set({ [CUSTOM_CATEGORIES_KEY]: parsed.data });
+  return { ok: true };
+}
+
+/** Reset categories to the 8 defaults in `chrome.storage.sync`. */
+export async function restoreDefaultCategories(): Promise<void> {
+  await chrome.storage.sync.set({ [CUSTOM_CATEGORIES_KEY]: [...ALL_CATEGORIES] });
+}
+
+export { CategoryNameSchema, CUSTOM_CATEGORIES_KEY };

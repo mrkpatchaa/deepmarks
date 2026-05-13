@@ -12,6 +12,7 @@ import ReactDOM from "react-dom/client";
 import "../../assets/tailwind.css";
 import { BYOKInput } from "../../components/Settings/BYOKInput";
 import { ClassifyEngineStatus } from "../../components/Settings/ClassifyEngineStatus";
+import { CategoryEditor } from "../../components/Settings/CategoryEditor";
 
 function OptionsApp() {
   return (
@@ -32,6 +33,10 @@ function OptionsApp() {
       <hr className="border-zinc-200 dark:border-zinc-700" />
 
       <BYOKInput />
+
+      <hr className="border-zinc-200 dark:border-zinc-700" />
+
+      <CategoryEditor />
     </div>
   );
 }
