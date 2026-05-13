@@ -1,16 +1,37 @@
+/**
+ * Options page root — Task 5.1
+ *
+ * Provider BYOK key management and engine status dashboard.
+ *
+ * SECURITY:
+ *   - Keys written to chrome.storage.local only (via BYOKInput).
+ *   - No key values are rendered or logged anywhere in this file.
+ */
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "../../assets/tailwind.css";
+import { BYOKInput } from "../../components/Settings/BYOKInput";
+import { ClassifyEngineStatus } from "../../components/Settings/ClassifyEngineStatus";
 
 function OptionsApp() {
   return (
-    <div className="mx-auto max-w-2xl p-8">
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-        Deepmarks Settings
-      </h1>
-      <p className="mt-2 text-sm text-zinc-500">
-        Configure your bookmark classification engine and categories.
-      </p>
+    <div className="mx-auto max-w-2xl space-y-8 p-8">
+      <header>
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+          Deepmarks Settings
+        </h1>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          Configure your bookmark classification engine.
+        </p>
+      </header>
+
+      <hr className="border-zinc-200 dark:border-zinc-700" />
+
+      <ClassifyEngineStatus />
+
+      <hr className="border-zinc-200 dark:border-zinc-700" />
+
+      <BYOKInput />
     </div>
   );
 }
@@ -23,3 +44,4 @@ ReactDOM.createRoot(rootEl).render(
     <OptionsApp />
   </React.StrictMode>,
 );
+
