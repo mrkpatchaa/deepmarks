@@ -38,6 +38,8 @@ import { saveWikiFile } from "../../lib/wiki/export";
 import { exportJSON } from "../../lib/agent/export";
 import { classifyAll } from "../../lib/classify/batch";
 import type { ClassifyAllProgress } from "../../lib/classify/batch";
+import { getBestAvailableEngine } from "../../lib/classify/router";
+import type { BYOKEngine } from "../../lib/classify/byok";
 import type { FilterCategory, CategoryCounts } from "../../components/CategoryFilter";
 import type { BookmarkNode, SearchResult, Category, BookmarkMeta } from "../../lib/bookmarks/types";
 
@@ -69,6 +71,7 @@ export default function App() {
   const [selectedBookmark, setSelectedBookmark] = useState<BookmarkNode | null>(null);
   const [classifyAllState, setClassifyAllState] = useState<ClassifyAllProgress & { running: boolean } | null>(null);
   const classifyAllAbort = useRef<AbortController | null>(null);
+  const [preferredEngine, setPreferredEngine] = useState<BYOKEngine>("openai");
   const [categoryCounts, setCategoryCounts] = useState<CategoryCounts>(DEFAULT_COUNTS);
   const loadState = useRef<LoadState>({
     lastKey: undefined,
@@ -108,10 +111,11 @@ export default function App() {
     })();
   }, []);
 
-  // Load first page + accurate counts on mount.
+  // Load first page + accurate counts on mount; also detect the best engine.
   useEffect(() => {
     loadPage();
     loadCounts();
+    void getBestAvailableEngine().then(setPreferredEngine);
     setInitialLoading(false);
   }, [loadPage, loadCounts]);
 
@@ -198,7 +202,7 @@ export default function App() {
       }
       await classifyAll(
         result.value,
-        "openai", // router falls back to regex if no BYOK key is set
+        preferredEngine,
         (progress) => {
           setClassifyAllState({ running: true, ...progress });
         },
@@ -215,7 +219,7 @@ export default function App() {
       setClassifyAllState(null);
       classifyAllAbort.current = null;
     })();
-  }, [classifyAllState]);
+  }, [classifyAllState, preferredEngine]);
 
   const handleCancelClassifyAll = useCallback((): void => {
     classifyAllAbort.current?.abort();
@@ -423,6 +427,7 @@ export default function App() {
           </div>
           <ClassifyPanel
             bookmark={selectedBookmark}
+            preferredEngine={preferredEngine}
             onClassified={handleClassified}
           />
         </div>

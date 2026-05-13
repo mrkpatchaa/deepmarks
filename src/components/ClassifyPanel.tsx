@@ -32,6 +32,7 @@ const ENGINE_LABELS: Record<ClassifyEngine, string> = {
   openai: "GPT-4o (BYOK)",
   anthropic: "Claude (BYOK)",
   gemini: "Gemini (BYOK)",
+  ollama: "Ollama (local)",
 };
 
 export function ClassifyPanel({

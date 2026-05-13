@@ -133,3 +133,19 @@ export async function getActiveEngine(
     const available = await isByokAvailable(preferredEngine);
     return available ? preferredEngine : "regex";
 }
+
+/**
+ * Returns the first configured BYOK engine in priority order:
+ * ollama → openai → anthropic → gemini.
+ *
+ * Falls back to "openai" (which will itself fall back to regex) if none is
+ * configured — callers should handle the regex-fallback case gracefully.
+ */
+const ENGINE_PRIORITY: BYOKEngine[] = ["ollama", "openai", "anthropic", "gemini"];
+
+export async function getBestAvailableEngine(): Promise<BYOKEngine> {
+    for (const engine of ENGINE_PRIORITY) {
+        if (await isByokAvailable(engine)) return engine;
+    }
+    return "openai";
+}
