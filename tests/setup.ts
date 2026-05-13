@@ -10,6 +10,13 @@
  */
 import { vi } from "vitest";
 
+// Set up the full suite of fake-indexeddb globals (IDBFactory, IDBRequest,
+// IDBKeyRange, IDBDatabase, IDBObjectStore, …) so that the `idb` library can
+// reference these constructors in instanceof checks.
+// We do this ONCE at setup time.  Individual tests reset globalThis.indexedDB
+// to a fresh IDBFactory for isolation (see tests/unit/storage.test.ts).
+import "fake-indexeddb/auto";
+
 const bookmarksEventMock = () => ({
   addListener: vi.fn(),
   removeListener: vi.fn(),

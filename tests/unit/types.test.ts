@@ -76,7 +76,7 @@ describe("Category type", () => {
     ];
     expect(categories).toHaveLength(8);
     // Runtime guard: every value is a known string
-    categories.forEach((c) => expect(typeof c).toBe("string"));
+    categories.forEach((c) => { expect(typeof c).toBe("string"); });
   });
 });
 
@@ -89,7 +89,7 @@ describe("ClassifyEngine type", () => {
       "gemini",
     ];
     expect(engines).toHaveLength(4);
-    engines.forEach((e) => expect(typeof e).toBe("string"));
+    engines.forEach((e) => { expect(typeof e).toBe("string"); });
   });
 });
 
