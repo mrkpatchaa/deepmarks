@@ -161,12 +161,12 @@ export async function getBookmarkPage(
  * custom). Always includes "all" for the total bookmark count.
  */
 export async function getBookmarkCounts(): Promise<
-    Result<{ all: number; [key: string]: number }>
+    Result<{ all: number;[key: string]: number }>
 > {
     try {
         const db = await openDb();
         const all = await db.getAll("bookmarks");
-        const counts: { all: number; [key: string]: number } = { all: all.length };
+        const counts: { all: number;[key: string]: number } = { all: all.length };
         for (const bm of all) {
             const cat = bm.meta?.category ?? "other";
             counts[cat] = (counts[cat] ?? 0) + 1;

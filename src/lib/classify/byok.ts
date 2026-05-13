@@ -340,7 +340,7 @@ async function doClassify(
         if (!parsed.success) {
             const rawCat =
                 "category" in innerJson &&
-                typeof (innerJson as Record<string, unknown>).category === "string"
+                    typeof (innerJson as Record<string, unknown>).category === "string"
                     ? ((innerJson as Record<string, unknown>).category as string)
                     : "unknown";
             return err(`Unrecognised category in response: "${rawCat}"`);
