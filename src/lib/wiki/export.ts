@@ -21,14 +21,14 @@ import { compileWiki } from "./compile";
  * @param dirHandle - A writable FileSystemDirectoryHandle from user gesture.
  */
 export async function saveWikiFile(
-  bookmarks: BookmarkNode[],
-  dirHandle: FileSystemDirectoryHandle,
+    bookmarks: BookmarkNode[],
+    dirHandle: FileSystemDirectoryHandle,
 ): Promise<void> {
-  const markdown = compileWiki(bookmarks);
-  const fileHandle = await dirHandle.getFileHandle("bookmarks-wiki.md", {
-    create: true,
-  });
-  const writable = await fileHandle.createWritable();
-  await writable.write(markdown);
-  await writable.close();
+    const markdown = compileWiki(bookmarks);
+    const fileHandle = await dirHandle.getFileHandle("bookmarks-wiki.md", {
+        create: true,
+    });
+    const writable = await fileHandle.createWritable();
+    await writable.write(markdown);
+    await writable.close();
 }

@@ -22,12 +22,12 @@ const handlers = new Set<ExtMessageHandler>();
 // ---------------------------------------------------------------------------
 
 export function sendToExtension(msg: DaemonToExt): void {
-  const json = JSON.stringify(msg);
-  const jsonBytes = Buffer.from(json, "utf8");
-  const header = Buffer.allocUnsafe(4);
-  header.writeUInt32LE(jsonBytes.length, 0);
-  // Write synchronously to stdout — process.stdout is a writable stream.
-  process.stdout.write(Buffer.concat([header, jsonBytes]));
+    const json = JSON.stringify(msg);
+    const jsonBytes = Buffer.from(json, "utf8");
+    const header = Buffer.allocUnsafe(4);
+    header.writeUInt32LE(jsonBytes.length, 0);
+    // Write synchronously to stdout — process.stdout is a writable stream.
+    process.stdout.write(Buffer.concat([header, jsonBytes]));
 }
 
 // ---------------------------------------------------------------------------
@@ -35,54 +35,54 @@ export function sendToExtension(msg: DaemonToExt): void {
 // ---------------------------------------------------------------------------
 
 export function startNativeMessagingReader(): void {
-  let buf = Buffer.alloc(0);
+    let buf = Buffer.alloc(0);
 
-  process.stdin.on("data", (chunk: Buffer) => {
-    buf = Buffer.concat([buf, chunk]);
-    processBuffer();
-  });
+    process.stdin.on("data", (chunk: Buffer) => {
+        buf = Buffer.concat([buf, chunk]);
+        processBuffer();
+    });
 
-  process.stdin.on("end", () => {
-    // Extension disconnected — exit cleanly.
-    process.exit(0);
-  });
+    process.stdin.on("end", () => {
+        // Extension disconnected — exit cleanly.
+        process.exit(0);
+    });
 
-  function processBuffer(): void {
-    // Loop so we handle multiple messages in a single data event.
-    for (;;) {
-      if (buf.length < 4) break;
-      const msgLen = buf.readUInt32LE(0);
-      if (buf.length < 4 + msgLen) break;
+    function processBuffer(): void {
+        // Loop so we handle multiple messages in a single data event.
+        for (; ;) {
+            if (buf.length < 4) break;
+            const msgLen = buf.readUInt32LE(0);
+            if (buf.length < 4 + msgLen) break;
 
-      const jsonStr = buf.subarray(4, 4 + msgLen).toString("utf8");
-      buf = buf.subarray(4 + msgLen);
+            const jsonStr = buf.subarray(4, 4 + msgLen).toString("utf8");
+            buf = buf.subarray(4 + msgLen);
 
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(jsonStr) as unknown;
-      } catch {
-        // Malformed JSON — skip.
-        continue;
-      }
+            let parsed: unknown;
+            try {
+                parsed = JSON.parse(jsonStr) as unknown;
+            } catch {
+                // Malformed JSON — skip.
+                continue;
+            }
 
-      dispatchMessage(parsed);
+            dispatchMessage(parsed);
+        }
     }
-  }
 }
 
 function dispatchMessage(raw: unknown): void {
-  if (
-    typeof raw !== "object" ||
-    raw === null ||
-    typeof (raw as Record<string, unknown>)["id"] !== "number" ||
-    typeof (raw as Record<string, unknown>)["type"] !== "string"
-  ) {
-    return;
-  }
-  const msg = raw as ExtToDaemon;
-  for (const handler of handlers) {
-    handler(msg);
-  }
+    if (
+        typeof raw !== "object" ||
+        raw === null ||
+        typeof (raw as Record<string, unknown>)["id"] !== "number" ||
+        typeof (raw as Record<string, unknown>)["type"] !== "string"
+    ) {
+        return;
+    }
+    const msg = raw as ExtToDaemon;
+    for (const handler of handlers) {
+        handler(msg);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +90,6 @@ function dispatchMessage(raw: unknown): void {
 // ---------------------------------------------------------------------------
 
 export function onExtensionMessage(handler: ExtMessageHandler): () => void {
-  handlers.add(handler);
-  return () => { handlers.delete(handler); };
+    handlers.add(handler);
+    return () => { handlers.delete(handler); };
 }

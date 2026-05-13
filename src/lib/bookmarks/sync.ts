@@ -19,8 +19,8 @@ import type { BookmarkNode } from "./types";
 import type { Result } from "./types";
 import { ok, err } from "./types";
 import {
-  upsertBookmark,
-  clearAllBookmarks,
+    upsertBookmark,
+    clearAllBookmarks,
 } from "../storage/db";
 
 // ---------------------------------------------------------------------------
@@ -39,20 +39,20 @@ import {
 const SAFE_URL_REGEX = /^https?:\/\//i;
 
 const SafeUrlSchema = z
-  .string()
-  .optional()
-  .transform((raw) => {
-    if (raw === undefined || raw === "") return undefined;
-    return SAFE_URL_REGEX.test(raw) ? raw : undefined;
-  });
+    .string()
+    .optional()
+    .transform((raw) => {
+        if (raw === undefined || raw === "") return undefined;
+        return SAFE_URL_REGEX.test(raw) ? raw : undefined;
+    });
 
 /** Schema for a single node returned by chrome.bookmarks.getTree(). */
 const RawBookmarkNodeSchema = z.object({
-  id: z.string(),
-  title: z.string().default(""),
-  url: SafeUrlSchema,
-  parentId: z.string().optional(),
-  dateAdded: z.number().optional().default(0),
+    id: z.string(),
+    title: z.string().default(""),
+    url: SafeUrlSchema,
+    parentId: z.string().optional(),
+    dateAdded: z.number().optional().default(0),
 });
 
 // The `children` field is not part of the schema — we traverse the tree
@@ -73,17 +73,17 @@ const RawBookmarkNodeSchema = z.object({
  * @returns A fully-formed BookmarkNode safe to persist to IndexedDB.
  */
 export function validateRawBookmark(
-  raw: Partial<chrome.bookmarks.BookmarkTreeNode>
+    raw: Partial<chrome.bookmarks.BookmarkTreeNode>
 ): BookmarkNode {
-  const parsed = RawBookmarkNodeSchema.parse(raw);
-  return {
-    id: parsed.id,
-    title: parsed.title,
-    url: parsed.url,
-    parentId: parsed.parentId,
-    dateAdded: parsed.dateAdded,
-    meta: undefined,
-  };
+    const parsed = RawBookmarkNodeSchema.parse(raw);
+    return {
+        id: parsed.id,
+        title: parsed.title,
+        url: parsed.url,
+        parentId: parsed.parentId,
+        dateAdded: parsed.dateAdded,
+        meta: undefined,
+    };
 }
 
 /**
@@ -91,16 +91,16 @@ export function validateRawBookmark(
  * Folders (no url) and leaves (with url) are both included.
  */
 function flattenTree(
-  nodes: chrome.bookmarks.BookmarkTreeNode[]
+    nodes: chrome.bookmarks.BookmarkTreeNode[]
 ): BookmarkNode[] {
-  const result: BookmarkNode[] = [];
-  for (const node of nodes) {
-    result.push(validateRawBookmark(node));
-    if (node.children && node.children.length > 0) {
-      result.push(...flattenTree(node.children));
+    const result: BookmarkNode[] = [];
+    for (const node of nodes) {
+        result.push(validateRawBookmark(node));
+        if (node.children && node.children.length > 0) {
+            result.push(...flattenTree(node.children));
+        }
     }
-  }
-  return result;
+    return result;
 }
 
 /**
@@ -121,22 +121,22 @@ function flattenTree(
  *     URLs accumulating in the store from old, since-deleted bookmarks.
  */
 export async function syncAllBookmarks(): Promise<Result<{ count: number }>> {
-  try {
-    const tree = await chrome.bookmarks.getTree();
-    const nodes = flattenTree(tree);
+    try {
+        const tree = await chrome.bookmarks.getTree();
+        const nodes = flattenTree(tree);
 
-    const clearResult = await clearAllBookmarks();
-    if (!clearResult.ok) return clearResult;
+        const clearResult = await clearAllBookmarks();
+        if (!clearResult.ok) return clearResult;
 
-    for (const node of nodes) {
-      const upsertResult = await upsertBookmark(node);
-      if (!upsertResult.ok) return upsertResult;
+        for (const node of nodes) {
+            const upsertResult = await upsertBookmark(node);
+            if (!upsertResult.ok) return upsertResult;
+        }
+
+        return ok({ count: nodes.length });
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
     }
-
-    return ok({ count: nodes.length });
-  } catch (e) {
-    return err(e instanceof Error ? e.message : String(e));
-  }
 }
 
 /**
@@ -159,13 +159,13 @@ let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
  * bookmark mutations (e.g. importing a large bookmark file).
  */
 function scheduleSyncDebounced(): void {
-  if (_debounceTimer !== null) {
-    clearTimeout(_debounceTimer);
-  }
-  _debounceTimer = setTimeout(() => {
-    _debounceTimer = null;
-    void syncAllBookmarks();
-  }, DEBOUNCE_MS);
+    if (_debounceTimer !== null) {
+        clearTimeout(_debounceTimer);
+    }
+    _debounceTimer = setTimeout(() => {
+        _debounceTimer = null;
+        void syncAllBookmarks();
+    }, DEBOUNCE_MS);
 }
 
 /** Whether the watcher listeners have been attached. */
@@ -177,10 +177,10 @@ let _watching = false;
  * Safe to call multiple times — only attaches once.
  */
 export function startWatcher(): void {
-  if (_watching) return;
-  _watching = true;
+    if (_watching) return;
+    _watching = true;
 
-  chrome.bookmarks.onCreated.addListener(scheduleSyncDebounced);
-  chrome.bookmarks.onChanged.addListener(scheduleSyncDebounced);
-  chrome.bookmarks.onRemoved.addListener(scheduleSyncDebounced);
+    chrome.bookmarks.onCreated.addListener(scheduleSyncDebounced);
+    chrome.bookmarks.onChanged.addListener(scheduleSyncDebounced);
+    chrome.bookmarks.onRemoved.addListener(scheduleSyncDebounced);
 }

@@ -19,10 +19,10 @@ import type { Result } from "../bookmarks/types";
 
 /** Typed schema keeps all DB operations fully typed with no `any` casts. */
 interface DeepmarksSchema extends DBSchema {
-  bookmarks: {
-    key: string;
-    value: BookmarkNode;
-  };
+    bookmarks: {
+        key: string;
+        value: BookmarkNode;
+    };
 }
 
 const DB_NAME = "deepmarks";
@@ -36,17 +36,17 @@ let _db: IDBPDatabase<DeepmarksSchema> | null = null;
  * Creates the schema on first open / version upgrade.
  */
 export async function openDb(): Promise<IDBPDatabase<DeepmarksSchema>> {
-  if (_db !== null) return _db;
+    if (_db !== null) return _db;
 
-  _db = await openDB<DeepmarksSchema>(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion) {
-      if (oldVersion < 1) {
-        db.createObjectStore("bookmarks", { keyPath: "id" });
-      }
-    },
-  });
+    _db = await openDB<DeepmarksSchema>(DB_NAME, DB_VERSION, {
+        upgrade(db, oldVersion) {
+            if (oldVersion < 1) {
+                db.createObjectStore("bookmarks", { keyPath: "id" });
+            }
+        },
+    });
 
-  return _db;
+    return _db;
 }
 
 /**
@@ -54,15 +54,15 @@ export async function openDb(): Promise<IDBPDatabase<DeepmarksSchema>> {
  * Uses `put` so an existing record with the same `id` is overwritten.
  */
 export async function upsertBookmark(
-  node: BookmarkNode
+    node: BookmarkNode
 ): Promise<Result<void>> {
-  try {
-    const db = await openDb();
-    await db.put("bookmarks", node);
-    return ok(undefined);
-  } catch (e) {
-    return err(e instanceof Error ? e.message : String(e));
-  }
+    try {
+        const db = await openDb();
+        await db.put("bookmarks", node);
+        return ok(undefined);
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+    }
 }
 
 /**
@@ -70,13 +70,13 @@ export async function upsertBookmark(
  * Returns an empty array if the store is empty.
  */
 export async function getAllBookmarks(): Promise<Result<BookmarkNode[]>> {
-  try {
-    const db = await openDb();
-    const all = await db.getAll("bookmarks");
-    return ok(all);
-  } catch (e) {
-    return err(e instanceof Error ? e.message : String(e));
-  }
+    try {
+        const db = await openDb();
+        const all = await db.getAll("bookmarks");
+        return ok(all);
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+    }
 }
 
 /**
@@ -84,15 +84,15 @@ export async function getAllBookmarks(): Promise<Result<BookmarkNode[]>> {
  * Returns `undefined` (not an error) when the ID is not found.
  */
 export async function getBookmarkById(
-  id: string
+    id: string
 ): Promise<Result<BookmarkNode | undefined>> {
-  try {
-    const db = await openDb();
-    const record = await db.get("bookmarks", id);
-    return ok(record);
-  } catch (e) {
-    return err(e instanceof Error ? e.message : String(e));
-  }
+    try {
+        const db = await openDb();
+        const record = await db.get("bookmarks", id);
+        return ok(record);
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+    }
 }
 
 /**
@@ -100,26 +100,26 @@ export async function getBookmarkById(
  * Idempotent — returns ok:true even if the ID does not exist.
  */
 export async function deleteBookmark(id: string): Promise<Result<void>> {
-  try {
-    const db = await openDb();
-    await db.delete("bookmarks", id);
-    return ok(undefined);
-  } catch (e) {
-    return err(e instanceof Error ? e.message : String(e));
-  }
+    try {
+        const db = await openDb();
+        await db.delete("bookmarks", id);
+        return ok(undefined);
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+    }
 }
 
 /**
  * Delete ALL bookmarks from the store (used during full re-sync).
  */
 export async function clearAllBookmarks(): Promise<Result<void>> {
-  try {
-    const db = await openDb();
-    await db.clear("bookmarks");
-    return ok(undefined);
-  } catch (e) {
-    return err(e instanceof Error ? e.message : String(e));
-  }
+    try {
+        const db = await openDb();
+        await db.clear("bookmarks");
+        return ok(undefined);
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+    }
 }
 
 /**
@@ -132,21 +132,21 @@ export async function clearAllBookmarks(): Promise<Result<void>> {
  * When the returned array length < limit, there are no more pages.
  */
 export async function getBookmarkPage(
-  startAfterKey: string | undefined,
-  limit = 200,
+    startAfterKey: string | undefined,
+    limit = 200,
 ): Promise<Result<BookmarkNode[]>> {
-  try {
-    const db = await openDb();
-    const range =
-      startAfterKey !== undefined
-        ? IDBKeyRange.lowerBound(startAfterKey, true)
-        : undefined;
-    const tx = db.transaction("bookmarks", "readonly");
-    const records = await tx.store.getAll(range, limit);
-    return ok(records);
-  } catch (e) {
-    return err(e instanceof Error ? e.message : String(e));
-  }
+    try {
+        const db = await openDb();
+        const range =
+            startAfterKey !== undefined
+                ? IDBKeyRange.lowerBound(startAfterKey, true)
+                : undefined;
+        const tx = db.transaction("bookmarks", "readonly");
+        const records = await tx.store.getAll(range, limit);
+        return ok(records);
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+    }
 }
 
 /**
@@ -157,8 +157,8 @@ export async function getBookmarkPage(
  * manages cleanup automatically.
  */
 export function closeDb(): void {
-  if (_db !== null) {
-    _db.close();
-    _db = null;
-  }
+    if (_db !== null) {
+        _db.close();
+        _db = null;
+    }
 }

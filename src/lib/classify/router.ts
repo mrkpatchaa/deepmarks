@@ -22,53 +22,53 @@ import { classifyByRegex } from "./regex";
 import { getBookmarkById, upsertBookmark } from "../storage/db";
 
 export interface ClassifyOutput {
-  category: Category;
-  /** The engine that actually produced the result (may differ from requested). */
-  usedEngine: ClassifyEngine;
+    category: Category;
+    /** The engine that actually produced the result (may differ from requested). */
+    usedEngine: ClassifyEngine;
 }
 
 // ── BYOK availability check ───────────────────────────────────────────────
 
 const STORAGE_KEY: Record<BYOKEngine, string> = {
-  openai: "byok_openai",
-  anthropic: "byok_anthropic",
-  gemini: "byok_gemini",
+    openai: "byok_openai",
+    anthropic: "byok_anthropic",
+    gemini: "byok_gemini",
 } as const;
 
 async function isByokAvailable(engine: BYOKEngine): Promise<boolean> {
-  try {
-    const consentRaw = await chrome.storage.local.get(CONSENT_KEY);
-    const consent = (consentRaw as Record<string, unknown>)[CONSENT_KEY];
-    if (consent !== true) return false;
+    try {
+        const consentRaw = await chrome.storage.local.get(CONSENT_KEY);
+        const consent = (consentRaw as Record<string, unknown>)[CONSENT_KEY];
+        if (consent !== true) return false;
 
-    const keyRaw = await chrome.storage.local.get(STORAGE_KEY[engine]);
-    const key = (keyRaw as Record<string, unknown>)[STORAGE_KEY[engine]];
-    return typeof key === "string" && key !== "";
-  } catch {
-    return false;
-  }
+        const keyRaw = await chrome.storage.local.get(STORAGE_KEY[engine]);
+        const key = (keyRaw as Record<string, unknown>)[STORAGE_KEY[engine]];
+        return typeof key === "string" && key !== "";
+    } catch {
+        return false;
+    }
 }
 
 // ── Meta persistence ──────────────────────────────────────────────────────
 
 async function persistMeta(
-  id: string,
-  category: Category,
-  engine: ClassifyEngine,
+    id: string,
+    category: Category,
+    engine: ClassifyEngine,
 ): Promise<void> {
-  const bookmarkResult = await getBookmarkById(id);
-  if (!bookmarkResult.ok || bookmarkResult.value === undefined) return;
+    const bookmarkResult = await getBookmarkById(id);
+    if (!bookmarkResult.ok || bookmarkResult.value === undefined) return;
 
-  const updated = {
-    ...bookmarkResult.value,
-    meta: {
-      ...(bookmarkResult.value.meta ?? { tags: [] }),
-      category,
-      classifiedAt: Date.now(),
-      classifiedBy: engine,
-    },
-  };
-  await upsertBookmark(updated);
+    const updated = {
+        ...bookmarkResult.value,
+        meta: {
+            ...(bookmarkResult.value.meta ?? { tags: [] }),
+            category,
+            classifiedAt: Date.now(),
+            classifiedBy: engine,
+        },
+    };
+    await upsertBookmark(updated);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
@@ -83,38 +83,38 @@ async function persistMeta(
  *                 unavailable or fails, falls back to regex silently.
  */
 export async function classify(
-  id: string,
-  url: string,
-  title: string,
-  engine: BYOKEngine = "openai",
+    id: string,
+    url: string,
+    title: string,
+    engine: BYOKEngine = "openai",
 ): Promise<Result<ClassifyOutput>> {
-  let category: Category;
-  let usedEngine: ClassifyEngine;
+    let category: Category;
+    let usedEngine: ClassifyEngine;
 
-  const byokAvailable = await isByokAvailable(engine);
+    const byokAvailable = await isByokAvailable(engine);
 
-  if (byokAvailable) {
-    const byokResult = await classifyWithBYOK(url, title, engine);
-    if (byokResult.ok) {
-      category = byokResult.value;
-      usedEngine = engine;
+    if (byokAvailable) {
+        const byokResult = await classifyWithBYOK(url, title, engine);
+        if (byokResult.ok) {
+            category = byokResult.value;
+            usedEngine = engine;
+        } else {
+            // BYOK failed — fall back to regex silently (never surface BYOK errors
+            // to the user without also providing a usable result).
+            category = classifyByRegex(url, title);
+            usedEngine = "regex";
+        }
     } else {
-      // BYOK failed — fall back to regex silently (never surface BYOK errors
-      // to the user without also providing a usable result).
-      category = classifyByRegex(url, title);
-      usedEngine = "regex";
+        category = classifyByRegex(url, title);
+        usedEngine = "regex";
     }
-  } else {
-    category = classifyByRegex(url, title);
-    usedEngine = "regex";
-  }
 
-  // Persist the result to IndexedDB. Failure is non-fatal — log and continue.
-  await persistMeta(id, category, usedEngine).catch(() => {
-    // Intentionally swallowed — classify result is still valid.
-  });
+    // Persist the result to IndexedDB. Failure is non-fatal — log and continue.
+    await persistMeta(id, category, usedEngine).catch(() => {
+        // Intentionally swallowed — classify result is still valid.
+    });
 
-  return ok({ category, usedEngine });
+    return ok({ category, usedEngine });
 }
 
 /**
@@ -124,8 +124,8 @@ export async function classify(
  * Returns "regex" when BYOK is unavailable or not configured.
  */
 export async function getActiveEngine(
-  preferredEngine: BYOKEngine = "openai",
+    preferredEngine: BYOKEngine = "openai",
 ): Promise<ClassifyEngine> {
-  const available = await isByokAvailable(preferredEngine);
-  return available ? preferredEngine : "regex";
+    const available = await isByokAvailable(preferredEngine);
+    return available ? preferredEngine : "regex";
 }

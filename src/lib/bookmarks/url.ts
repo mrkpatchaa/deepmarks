@@ -16,14 +16,14 @@ export const SAFE_URL_RE = /^https?:\/\//i;
  * Example: `"https://github.com/..."` → `"G"`
  */
 export function domainInitial(url: string | undefined): string {
-  if (url === undefined || url === "") return "?";
-  try {
-    const hostname = new URL(url).hostname;
-    const first = hostname.charAt(0);
-    return first === "" ? "?" : first.toUpperCase();
-  } catch {
-    return "?";
-  }
+    if (url === undefined || url === "") return "?";
+    try {
+        const hostname = new URL(url).hostname;
+        const first = hostname.charAt(0);
+        return first === "" ? "?" : first.toUpperCase();
+    } catch {
+        return "?";
+    }
 }
 
 /**
@@ -32,5 +32,5 @@ export function domainInitial(url: string | undefined): string {
  * returns false and must never be rendered as an anchor href.
  */
 export function isSafeUrl(url: string | undefined): url is string {
-  return url !== undefined && SAFE_URL_RE.test(url);
+    return url !== undefined && SAFE_URL_RE.test(url);
 }

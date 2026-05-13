@@ -23,16 +23,16 @@ import { z } from "zod";
 
 /** Messages sent FROM the extension TO the daemon. */
 export interface OutboundMessage {
-  id: number;
-  type: string;
-  payload: Record<string, unknown>;
+    id: number;
+    type: string;
+    payload: Record<string, unknown>;
 }
 
 /** Zod schema for messages arriving FROM the daemon. */
 const InboundMessageSchema = z.object({
-  id: z.number().int().nonnegative(),
-  type: z.string(),
-  payload: z.record(z.string(), z.unknown()),
+    id: z.number().int().nonnegative(),
+    type: z.string(),
+    payload: z.record(z.string(), z.unknown()),
 });
 
 export type InboundMessage = z.infer<typeof InboundMessageSchema>;
@@ -66,63 +66,63 @@ const handlers = new Set<MessageHandler>();
 // ---------------------------------------------------------------------------
 
 function backoffDelay(attempt: number): number {
-  const delay = BACKOFF_BASE_MS * Math.pow(BACKOFF_FACTOR, attempt);
-  return Math.min(delay, BACKOFF_MAX_MS);
+    const delay = BACKOFF_BASE_MS * Math.pow(BACKOFF_FACTOR, attempt);
+    return Math.min(delay, BACKOFF_MAX_MS);
 }
 
 function onMessage(raw: unknown): void {
-  const result = InboundMessageSchema.safeParse(raw);
-  if (!result.success) {
-    // Drop malformed messages silently.
-    return;
-  }
-  const msg = result.data;
-  for (const handler of handlers) {
-    handler(msg);
-  }
+    const result = InboundMessageSchema.safeParse(raw);
+    if (!result.success) {
+        // Drop malformed messages silently.
+        return;
+    }
+    const msg = result.data;
+    for (const handler of handlers) {
+        handler(msg);
+    }
 }
 
 function onDisconnect(): void {
-  port = null;
+    port = null;
 
-  // chrome.runtime.lastError is set when the native host is not installed.
-  const err = chrome.runtime.lastError;
-  if (err !== undefined) {
-    const msg: string = err.message ?? "";
-    if (
-      msg.includes("not found") ||
-      msg.includes("not registered") ||
-      msg.includes("Specified native messaging host not found")
-    ) {
-      daemonInstalled = false;
-      // Do not retry: daemon is not installed.
-      return;
+    // chrome.runtime.lastError is set when the native host is not installed.
+    const err = chrome.runtime.lastError;
+    if (err !== undefined) {
+        const msg: string = err.message ?? "";
+        if (
+            msg.includes("not found") ||
+            msg.includes("not registered") ||
+            msg.includes("Specified native messaging host not found")
+        ) {
+            daemonInstalled = false;
+            // Do not retry: daemon is not installed.
+            return;
+        }
     }
-  }
 
-  // Transient disconnect — schedule reconnect with backoff.
-  attemptCount += 1;
-  const delay = backoffDelay(attemptCount);
-  reconnectTimerId = setTimeout(() => {
-    reconnectTimerId = null;
-    connect();
-  }, delay);
+    // Transient disconnect — schedule reconnect with backoff.
+    attemptCount += 1;
+    const delay = backoffDelay(attemptCount);
+    reconnectTimerId = setTimeout(() => {
+        reconnectTimerId = null;
+        connect();
+    }, delay);
 }
 
 function connect(): void {
-  if (port !== null) return; // already connected
+    if (port !== null) return; // already connected
 
-  try {
-    port = chrome.runtime.connectNative(NATIVE_HOST);
-    daemonInstalled = true;
-    attemptCount = 0;
+    try {
+        port = chrome.runtime.connectNative(NATIVE_HOST);
+        daemonInstalled = true;
+        attemptCount = 0;
 
-    port.onMessage.addListener(onMessage);
-    port.onDisconnect.addListener(onDisconnect);
-  } catch {
-    // connectNative throws synchronously if the host is not registered (Firefox).
-    daemonInstalled = false;
-  }
+        port.onMessage.addListener(onMessage);
+        port.onDisconnect.addListener(onDisconnect);
+    } catch {
+        // connectNative throws synchronously if the host is not registered (Firefox).
+        daemonInstalled = false;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ function connect(): void {
  * host is not found.
  */
 export function isDaemonInstalled(): boolean {
-  return daemonInstalled;
+    return daemonInstalled;
 }
 
 /**
@@ -143,8 +143,8 @@ export function isDaemonInstalled(): boolean {
  * Returns an unsubscribe function.
  */
 export function setDaemonListener(handler: MessageHandler): () => void {
-  handlers.add(handler);
-  return () => { handlers.delete(handler); };
+    handlers.add(handler);
+    return () => { handlers.delete(handler); };
 }
 
 /**
@@ -152,14 +152,14 @@ export function setDaemonListener(handler: MessageHandler): () => void {
  * Returns `false` if no connection is available.
  */
 export function sendToDaemon(msg: OutboundMessage): boolean {
-  if (port === null) {
-    connect();
-  }
-  if (port === null) {
-    return false;
-  }
-  port.postMessage(msg);
-  return true;
+    if (port === null) {
+        connect();
+    }
+    if (port === null) {
+        return false;
+    }
+    port.postMessage(msg);
+    return true;
 }
 
 /**
@@ -167,13 +167,13 @@ export function sendToDaemon(msg: OutboundMessage): boolean {
  * extension suspend.
  */
 export function disconnectDaemon(): void {
-  if (reconnectTimerId !== null) {
-    clearTimeout(reconnectTimerId);
-    reconnectTimerId = null;
-  }
-  if (port !== null) {
-    port.disconnect();
-    port = null;
-  }
-  attemptCount = 0;
+    if (reconnectTimerId !== null) {
+        clearTimeout(reconnectTimerId);
+        reconnectTimerId = null;
+    }
+    if (port !== null) {
+        port.disconnect();
+        port = null;
+    }
+    attemptCount = 0;
 }

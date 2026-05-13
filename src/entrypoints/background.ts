@@ -21,23 +21,23 @@
  */
 import { z } from "zod";
 import {
-  syncAllBookmarks,
-  startWatcher,
-  validateRawBookmark,
-  getAllBookmarksFromDb,
+    syncAllBookmarks,
+    startWatcher,
+    validateRawBookmark,
+    getAllBookmarksFromDb,
 } from "../lib/bookmarks/sync";
 import {
-  buildIndex,
-  addToIndex,
-  updateInIndex,
-  removeFromIndex,
-  searchBookmarks,
+    buildIndex,
+    addToIndex,
+    updateInIndex,
+    removeFromIndex,
+    searchBookmarks,
 } from "../lib/search/index";
 import {
-  sendToDaemon,
-  setDaemonListener,
-  isDaemonInstalled,
-  disconnectDaemon,
+    sendToDaemon,
+    setDaemonListener,
+    isDaemonInstalled,
+    disconnectDaemon,
 } from "../lib/agent/native-messaging";
 
 // ---------------------------------------------------------------------------
@@ -45,21 +45,21 @@ import {
 // ---------------------------------------------------------------------------
 
 const SearchMessageSchema = z.object({
-  type: z.literal("SEARCH"),
-  query: z.string().max(200),
-  limit: z.number().int().min(1).max(100).optional(),
+    type: z.literal("SEARCH"),
+    query: z.string().max(200),
+    limit: z.number().int().min(1).max(100).optional(),
 });
 
 /** Relay a message to the daemon and forward the response back to the caller. */
 const NativeMsgSchema = z.object({
-  type: z.literal("NATIVE_MSG"),
-  id: z.number().int().nonnegative(),
-  nativeType: z.string(),
-  payload: z.record(z.string(), z.unknown()),
+    type: z.literal("NATIVE_MSG"),
+    id: z.number().int().nonnegative(),
+    nativeType: z.string(),
+    payload: z.record(z.string(), z.unknown()),
 });
 
 const DaemonStatusSchema = z.object({
-  type: z.literal("DAEMON_STATUS"),
+    type: z.literal("DAEMON_STATUS"),
 });
 
 // ---------------------------------------------------------------------------
@@ -67,22 +67,22 @@ const DaemonStatusSchema = z.object({
 // ---------------------------------------------------------------------------
 
 async function initialSync(): Promise<void> {
-  const result = await syncAllBookmarks();
-  if (result.ok) {
-    console.log(`[deepmarks] synced ${String(result.value.count)} bookmarks`);
-  } else {
-    console.error(`[deepmarks] sync failed: ${result.error}`);
-    return;
-  }
+    const result = await syncAllBookmarks();
+    if (result.ok) {
+        console.log(`[deepmarks] synced ${String(result.value.count)} bookmarks`);
+    } else {
+        console.error(`[deepmarks] sync failed: ${result.error}`);
+        return;
+    }
 
-  // Build the search index from freshly synced data.
-  const all = await getAllBookmarksFromDb();
-  if (all.ok) {
-    buildIndex(all.value);
-    console.log(`[deepmarks] indexed ${String(all.value.length)} bookmarks`);
-  }
+    // Build the search index from freshly synced data.
+    const all = await getAllBookmarksFromDb();
+    if (all.ok) {
+        buildIndex(all.value);
+        console.log(`[deepmarks] indexed ${String(all.value.length)} bookmarks`);
+    }
 
-  startWatcher();
+    startWatcher();
 }
 
 // ---------------------------------------------------------------------------
@@ -90,25 +90,25 @@ async function initialSync(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function registerIndexWatcher(): void {
-  // onCreated supplies the full BookmarkTreeNode — validate and add immediately.
-  chrome.bookmarks.onCreated.addListener((_id, treeNode) => {
-    addToIndex(validateRawBookmark(treeNode));
-  });
-
-  // onChanged only supplies partial data; fetch the current full node first.
-  chrome.bookmarks.onChanged.addListener((id, _changeInfo) => {
-    void chrome.bookmarks.get(id).then((results) => {
-      const treeNode = results[0];
-      if (treeNode !== undefined) {
-        updateInIndex(validateRawBookmark(treeNode));
-      }
+    // onCreated supplies the full BookmarkTreeNode — validate and add immediately.
+    chrome.bookmarks.onCreated.addListener((_id, treeNode) => {
+        addToIndex(validateRawBookmark(treeNode));
     });
-  });
 
-  // onRemoved — id is sufficient to remove from the index.
-  chrome.bookmarks.onRemoved.addListener((id) => {
-    removeFromIndex(id);
-  });
+    // onChanged only supplies partial data; fetch the current full node first.
+    chrome.bookmarks.onChanged.addListener((id, _changeInfo) => {
+        void chrome.bookmarks.get(id).then((results) => {
+            const treeNode = results[0];
+            if (treeNode !== undefined) {
+                updateInIndex(validateRawBookmark(treeNode));
+            }
+        });
+    });
+
+    // onRemoved — id is sufficient to remove from the index.
+    chrome.bookmarks.onRemoved.addListener((id) => {
+        removeFromIndex(id);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -116,53 +116,53 @@ function registerIndexWatcher(): void {
 // ---------------------------------------------------------------------------
 
 function registerMessageHandler(): void {
-  // Map from request id → sendResponse callback for in-flight NATIVE_MSG requests.
-  const pending = new Map<number, (value: unknown) => void>();
+    // Map from request id → sendResponse callback for in-flight NATIVE_MSG requests.
+    const pending = new Map<number, (value: unknown) => void>();
 
-  // Register daemon inbound listener once — forwards responses to pending callers.
-  setDaemonListener((msg) => {
-    const resolve = pending.get(msg.id);
-    if (resolve !== undefined) {
-      pending.delete(msg.id);
-      resolve(msg.payload);
-    }
-  });
-
-  chrome.runtime.onMessage.addListener(
-    (message, _sender, sendResponse) => {
-      // ── SEARCH ──────────────────────────────────────────────────────────
-      const search = SearchMessageSchema.safeParse(message);
-      if (search.success) {
-        const { query, limit } = search.data;
-        sendResponse(searchBookmarks(query, limit));
-        return false;
-      }
-
-      // ── DAEMON_STATUS ────────────────────────────────────────────────────
-      const status = DaemonStatusSchema.safeParse(message);
-      if (status.success) {
-        sendResponse({ installed: isDaemonInstalled() });
-        return false;
-      }
-
-      // ── NATIVE_MSG ───────────────────────────────────────────────────────
-      const native = NativeMsgSchema.safeParse(message);
-      if (native.success) {
-        const { id, nativeType, payload } = native.data;
-        pending.set(id, sendResponse);
-        const sent = sendToDaemon({ id, type: nativeType, payload });
-        if (!sent) {
-          pending.delete(id);
-          sendResponse({ error: "daemon_unavailable" });
-          return false;
+    // Register daemon inbound listener once — forwards responses to pending callers.
+    setDaemonListener((msg) => {
+        const resolve = pending.get(msg.id);
+        if (resolve !== undefined) {
+            pending.delete(msg.id);
+            resolve(msg.payload);
         }
-        // Keep channel open for async response.
-        return true;
-      }
+    });
 
-      return false;
-    },
-  );
+    chrome.runtime.onMessage.addListener(
+        (message, _sender, sendResponse) => {
+            // ── SEARCH ──────────────────────────────────────────────────────────
+            const search = SearchMessageSchema.safeParse(message);
+            if (search.success) {
+                const { query, limit } = search.data;
+                sendResponse(searchBookmarks(query, limit));
+                return false;
+            }
+
+            // ── DAEMON_STATUS ────────────────────────────────────────────────────
+            const status = DaemonStatusSchema.safeParse(message);
+            if (status.success) {
+                sendResponse({ installed: isDaemonInstalled() });
+                return false;
+            }
+
+            // ── NATIVE_MSG ───────────────────────────────────────────────────────
+            const native = NativeMsgSchema.safeParse(message);
+            if (native.success) {
+                const { id, nativeType, payload } = native.data;
+                pending.set(id, sendResponse);
+                const sent = sendToDaemon({ id, type: nativeType, payload });
+                if (!sent) {
+                    pending.delete(id);
+                    sendResponse({ error: "daemon_unavailable" });
+                    return false;
+                }
+                // Keep channel open for async response.
+                return true;
+            }
+
+            return false;
+        },
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -170,22 +170,22 @@ function registerMessageHandler(): void {
 // ---------------------------------------------------------------------------
 
 export default defineBackground(() => {
-  chrome.runtime.onInstalled.addListener(() => {
-    void initialSync();
-  });
-
-  chrome.runtime.onStartup.addListener(() => {
-    void initialSync();
-  });
-
-  // Tear down the native messaging port when the service worker is about to
-  // be killed so Chrome does not log a stale port warning.
-  if (typeof self !== "undefined" && "addEventListener" in self) {
-    (self as unknown as { addEventListener: (evt: string, cb: () => void) => void }).addEventListener("beforeunload", () => {
-      disconnectDaemon();
+    chrome.runtime.onInstalled.addListener(() => {
+        void initialSync();
     });
-  }
 
-  registerIndexWatcher();
-  registerMessageHandler();
+    chrome.runtime.onStartup.addListener(() => {
+        void initialSync();
+    });
+
+    // Tear down the native messaging port when the service worker is about to
+    // be killed so Chrome does not log a stale port warning.
+    if (typeof self !== "undefined" && "addEventListener" in self) {
+        (self as unknown as { addEventListener: (evt: string, cb: () => void) => void }).addEventListener("beforeunload", () => {
+            disconnectDaemon();
+        });
+    }
+
+    registerIndexWatcher();
+    registerMessageHandler();
 });

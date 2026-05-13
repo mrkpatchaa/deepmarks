@@ -4,79 +4,79 @@
  */
 
 export type Category =
-  | "tool"
-  | "security"
-  | "technique"
-  | "launch"
-  | "research"
-  | "opinion"
-  | "commerce"
-  | "other";
+    | "tool"
+    | "security"
+    | "technique"
+    | "launch"
+    | "research"
+    | "opinion"
+    | "commerce"
+    | "other";
 
 export interface BookmarkMeta {
-  category: Category | undefined;
-  tags: string[];
-  classifiedAt: number | undefined;
-  classifiedBy: string;
+    category: Category | undefined;
+    tags: string[];
+    classifiedAt: number | undefined;
+    classifiedBy: string;
 }
 
 export interface BookmarkNode {
-  id: string;
-  title: string;
-  url: string | undefined;
-  parentId: string | undefined;
-  dateAdded: number;
-  meta: BookmarkMeta | undefined;
+    id: string;
+    title: string;
+    url: string | undefined;
+    parentId: string | undefined;
+    dateAdded: number;
+    meta: BookmarkMeta | undefined;
 }
 
 // ── Native Messaging protocol ───────────────────────────────────────────────
 
 /** Message sent FROM the daemon TO the extension. */
 export interface DaemonToExt {
-  id: number;
-  type: string;
-  payload: Record<string, unknown>;
+    id: number;
+    type: string;
+    payload: Record<string, unknown>;
 }
 
 /** Message sent FROM the extension TO the daemon. */
 export interface ExtToDaemon {
-  id: number;
-  type: string;
-  payload: Record<string, unknown>;
+    id: number;
+    type: string;
+    payload: Record<string, unknown>;
 }
 
 // ── MCP tool interfaces ─────────────────────────────────────────────────────
 
 export interface SearchBookmarksInput {
-  query: string;
-  limit?: number;
+    query: string;
+    limit?: number;
 }
 
 export interface SearchBookmarksResult {
-  bookmarks: BookmarkNode[];
+    bookmarks: BookmarkNode[];
 }
 
 export interface ListCategoriesResult {
-  categories: string[];
+    categories: string[];
 }
 
 export interface GetBookmarkInput {
-  id: string;
+    id: string;
 }
 
 export interface GetBookmarkResult {
-  bookmark: BookmarkNode | null;
+    bookmark: BookmarkNode | null;
 }
 
 export interface ExportWikiResult {
-  markdown: string;
+    markdown: string;
 }
 
 export interface ClassifyBookmarkInput {
-  url: string;
-  title: string;
+    url: string;
+    title: string;
 }
 
 export interface ClassifyBookmarkResult {
-  category: Category;
+    category: Category;
 }

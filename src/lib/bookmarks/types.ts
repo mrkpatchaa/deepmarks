@@ -10,14 +10,14 @@
  * Stored in IndexedDB only — never written back to native bookmark titles.
  */
 export type Category =
-  | "tool"
-  | "security"
-  | "technique"
-  | "launch"
-  | "research"
-  | "opinion"
-  | "commerce"
-  | "other";
+    | "tool"
+    | "security"
+    | "technique"
+    | "launch"
+    | "research"
+    | "opinion"
+    | "commerce"
+    | "other";
 
 /**
  * Which engine produced the classification.
@@ -30,10 +30,10 @@ export type ClassifyEngine = "regex" | "openai" | "anthropic" | "gemini";
  * Stored in the IndexedDB 'bookmarks' store alongside the node data.
  */
 export interface BookmarkMeta {
-  category: Category | undefined;
-  tags: string[];
-  classifiedAt: number | undefined;
-  classifiedBy: ClassifyEngine;
+    category: Category | undefined;
+    tags: string[];
+    classifiedAt: number | undefined;
+    classifiedBy: ClassifyEngine;
 }
 
 /**
@@ -51,29 +51,29 @@ export interface BookmarkMeta {
  *   before reaching the storage layer. Do NOT write raw chrome.bookmarks data.
  */
 export interface BookmarkNode {
-  /** Native Chrome bookmark ID (opaque string). */
-  id: string;
-  /** Display title — stored as plain text, never as HTML. */
-  title: string;
-  /**
-   * URL validated to https?:// only.
-   * undefined for folder nodes or any bookmark whose URL fails validation.
-   */
-  url: string | undefined;
-  /** Parent folder ID; undefined for root nodes. */
-  parentId: string | undefined;
-  /** Unix timestamp (ms) when the bookmark was created. */
-  dateAdded: number;
-  /** Classification metadata; undefined until classified. */
-  meta: BookmarkMeta | undefined;
+    /** Native Chrome bookmark ID (opaque string). */
+    id: string;
+    /** Display title — stored as plain text, never as HTML. */
+    title: string;
+    /**
+     * URL validated to https?:// only.
+     * undefined for folder nodes or any bookmark whose URL fails validation.
+     */
+    url: string | undefined;
+    /** Parent folder ID; undefined for root nodes. */
+    parentId: string | undefined;
+    /** Unix timestamp (ms) when the bookmark was created. */
+    dateAdded: number;
+    /** Classification metadata; undefined until classified. */
+    meta: BookmarkMeta | undefined;
 }
 
 /**
  * Search result returned by the FlexSearch query wrapper.
  */
 export interface SearchResult {
-  bookmark: BookmarkNode;
-  score: number;
+    bookmark: BookmarkNode;
+    score: number;
 }
 
 /**
@@ -83,8 +83,8 @@ export interface SearchResult {
  * Errors are surfaced as `{ ok: false, error: string }`.
  */
 export type Result<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string };
+    | { ok: true; value: T }
+    | { ok: false; error: string };
 
 /** Convenience helpers for constructing Result values. */
 export const ok = <T>(value: T): Result<T> => ({ ok: true, value });

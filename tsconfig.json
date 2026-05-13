@@ -1,36 +1,45 @@
 {
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "lib": ["ESNext", "DOM"],
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitAny": true,
-    "noImplicitOverride": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "allowImportingTsExtensions": true,
-    "types": ["chrome"],
-    "paths": {
-      "@": ["./src"],
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": [
-    "src/**/*",
-    "tests/**/*",
-    "wxt.config.ts",
-    "vitest.config.ts",
-    ".wxt/wxt.d.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    ".output",
-    "daemon"
-  ]
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "lib": [
+            "ESNext",
+            "DOM"
+        ],
+        "jsx": "react-jsx",
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "noImplicitAny": true,
+        "noImplicitOverride": true,
+        "noEmit": true,
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "allowImportingTsExtensions": true,
+        "types": [
+            "chrome"
+        ],
+        "paths": {
+            "@": [
+                "./src"
+            ],
+            "@/*": [
+                "./src/*"
+            ]
+        }
+    },
+    "include": [
+        "src/**/*",
+        "tests/**/*",
+        "wxt.config.ts",
+        "vitest.config.ts",
+        ".wxt/wxt.d.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        ".output",
+        "daemon"
+    ]
 }
