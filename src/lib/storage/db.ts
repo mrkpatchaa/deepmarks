@@ -199,6 +199,70 @@ export async function getBookmarkCounts(): Promise<Result<{
 }
 
 /**
+ * Per-category counts plus top-N link domains for the Stats tab.
+ * Does a single IDB scan to avoid multiple round-trips.
+ */
+export interface StatsData {
+    total: number;
+    /** Bookmarks that have an explicit meta.category assigned. */
+    classified: number;
+    /** Sorted descending by count, only categories with count > 0. */
+    categories: { name: string; count: number }[];
+    /** Top link domains (hostname without leading www.) sorted by count. */
+    topDomains: { domain: string; count: number }[];
+}
+
+/**
+ * Compute overview stats in a single IDB scan.
+ *
+ * @param domainLimit - Maximum number of link domains to return.  Default 15.
+ */
+export async function getStatsData(domainLimit = 15): Promise<Result<StatsData>> {
+    try {
+        const db = await openDb();
+        const all = await db.getAll("bookmarks");
+
+        let classified = 0;
+        const catCounts = new Map<string, number>();
+        const domainCounts = new Map<string, number>();
+
+        for (const bm of all) {
+            // Track explicitly-classified bookmarks
+            if (bm.meta?.category !== undefined) {
+                classified++;
+                const cat = bm.meta.category;
+                catCounts.set(cat, (catCounts.get(cat) ?? 0) + 1);
+            }
+
+            // Extract link domain from URL
+            if (bm.url) {
+                try {
+                    const host = new URL(bm.url).hostname.replace(/^www\./, "");
+                    if (host) {
+                        domainCounts.set(host, (domainCounts.get(host) ?? 0) + 1);
+                    }
+                } catch {
+                    // Invalid URL — skip
+                }
+            }
+        }
+
+        const categories = [...catCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([name, count]) => ({ name, count }));
+
+        const topDomains = [...domainCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, domainLimit)
+            .map(([domain, count]) => ({ domain, count }));
+
+        return ok({ total: all.length, classified, categories, topDomains });
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+    }
+}
+
+/**
  * Close the current DB connection and clear the cached instance.
  *
  * Use this in tests to reset state between test runs, or if the DB version

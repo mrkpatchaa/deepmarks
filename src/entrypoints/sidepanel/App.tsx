@@ -27,6 +27,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBookmarkPage, getAllBookmarks, getBookmarkCounts } from "../../lib/storage/db";
+import { StatsView } from "../../components/StatsView";
 import { BookmarkList } from "../../components/BookmarkList";
 import { SearchBar } from "../../components/SearchBar";
 import { CategoryFilter } from "../../components/CategoryFilter";
@@ -50,7 +51,7 @@ const DEFAULT_COUNTS: CategoryCounts = {
   launch: 0, research: 0, opinion: 0, commerce: 0, other: 0,
 };
 
-type TabId = "bookmarks" | "wiki";
+type TabId = "bookmarks" | "wiki" | "stats";
 
 /** Mutable ref bag — avoids stale closure issues without extra re-renders. */
 interface LoadState {
@@ -384,6 +385,15 @@ export default function App() {
         >
           Wiki
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "stats"}
+          onClick={() => { handleTabChange("stats"); }}
+          className={`px-4 py-2 text-sm font-medium ${activeTab === "stats" ? "border-b-2 border-blue-500 text-blue-600 dark:text-blue-400" : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"}`}
+        >
+          Stats
+        </button>
       </nav>
 
       {activeTab === "bookmarks" && (
@@ -407,6 +417,12 @@ export default function App() {
       {activeTab === "wiki" && (
         <main className="flex-1 overflow-y-auto px-4 py-4">
           {wikiMarkdown !== null && <WikiView markdown={wikiMarkdown} />}
+        </main>
+      )}
+
+      {activeTab === "stats" && (
+        <main className="flex-1 overflow-hidden">
+          <StatsView />
         </main>
       )}
 
