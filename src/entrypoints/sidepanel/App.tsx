@@ -1,17 +1,23 @@
 /**
- * Side panel root — Task 3.1
+ * Side panel root — Task 3.1 + Task 3.2
  *
  * Loads bookmarks directly from IndexedDB via cursor-based pagination
  * (page size 200). No GET_ALL message to the background worker.
  *
+ * Search (Task 3.2): typing in SearchBar sends a SEARCH message to the
+ * background, which uses the in-memory FlexSearch index and responds
+ * synchronously with ranked results.
+ *
  * SECURITY:
  *   - No remote resources of any kind are requested.
  *   - URL scheme guard is enforced inside BookmarkCard.
+ *   - Search query is Zod-validated in the background message handler.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBookmarkPage } from "../../lib/storage/db";
 import { BookmarkList } from "../../components/BookmarkList";
-import type { BookmarkNode } from "../../lib/bookmarks/types";
+import { SearchBar } from "../../components/SearchBar";
+import type { BookmarkNode, SearchResult } from "../../lib/bookmarks/types";
 
 const PAGE_SIZE = 200;
 
@@ -23,7 +29,9 @@ interface LoadState {
 }
 
 export default function App() {
-  const [bookmarks, setBookmarks] = useState<BookmarkNode[]>([]);
+  const [allBookmarks, setAllBookmarks] = useState<BookmarkNode[]>([]);
+  const [searchResults, setSearchResults] = useState<BookmarkNode[] | null>(null);
+  const [resultCount, setResultCount] = useState<number | undefined>(undefined);
   const [initialLoading, setInitialLoading] = useState(true);
   const loadState = useRef<LoadState>({
     lastKey: undefined,
@@ -45,7 +53,7 @@ export default function App() {
           state.lastKey = lastItem?.id;
           state.hasMore = page.length >= PAGE_SIZE;
           if (page.length > 0) {
-            setBookmarks((prev) => [...prev, ...page]);
+            setAllBookmarks((prev) => [...prev, ...page]);
           }
         }
       } finally {
@@ -59,6 +67,25 @@ export default function App() {
     loadPage();
     setInitialLoading(false);
   }, [loadPage]);
+
+  // Handle search query — send SEARCH message to background, show results.
+  const handleSearch = useCallback((query: string): void => {
+    if (query === "") {
+      setSearchResults(null);
+      setResultCount(undefined);
+      return;
+    }
+    chrome.runtime.sendMessage(
+      { type: "SEARCH", query, limit: 50 },
+      (results: SearchResult[]) => {
+        const nodes = results.map((r) => r.bookmark);
+        setSearchResults(nodes);
+        setResultCount(nodes.length);
+      },
+    );
+  }, []);
+
+  const displayedBookmarks = searchResults ?? allBookmarks;
 
   if (initialLoading) {
     return (
@@ -75,8 +102,12 @@ export default function App() {
           Deepmarks
         </h1>
       </header>
+      <SearchBar onSearch={handleSearch} resultCount={resultCount} />
       <main className="flex-1 overflow-hidden">
-        <BookmarkList bookmarks={bookmarks} onScrollNearEnd={loadPage} />
+        <BookmarkList
+          bookmarks={displayedBookmarks}
+          onScrollNearEnd={searchResults === null ? loadPage : undefined}
+        />
       </main>
     </div>
   );

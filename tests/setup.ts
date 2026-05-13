@@ -9,6 +9,7 @@
  *   (chrome.bookmarks.getTree as ReturnType<typeof vi.fn>).mockResolvedValue(...)
  */
 import { vi } from "vitest";
+import "@testing-library/jest-dom";
 
 // Set up the full suite of fake-indexeddb globals (IDBFactory, IDBRequest,
 // IDBKeyRange, IDBDatabase, IDBObjectStore, …) so that the `idb` library can
