@@ -20,7 +20,8 @@ import type { Result } from "./types";
 import { ok, err } from "./types";
 import {
     upsertBookmark,
-    clearAllBookmarks,
+    getAllBookmarks,
+    deleteBookmark,
 } from "../storage/db";
 
 // ---------------------------------------------------------------------------
@@ -107,30 +108,47 @@ function flattenTree(
  * Perform a full sync of chrome.bookmarks → IndexedDB.
  *
  * Steps:
- *   1. Fetch the entire bookmark tree via chrome.bookmarks.getTree()
- *   2. Flatten + validate all nodes through RawBookmarkNodeSchema
- *   3. Clear IndexedDB (removes stale nodes deleted since last sync)
- *   4. Upsert all nodes
+ *   1. Read existing IDB records into a Map to preserve classification metadata
+ *   2. Fetch the entire bookmark tree via chrome.bookmarks.getTree()
+ *   3. Flatten + validate all nodes through RawBookmarkNodeSchema
+ *   4. Upsert each node, keeping any existing meta (category, tags, etc.)
+ *   5. Delete IDB records whose IDs are no longer present in Chrome's tree
  *
  * Returns the count of nodes written.
  *
  * SECURITY NOTE:
  *   - No raw browser data reaches IndexedDB. Every node passes through
  *     `validateRawBookmark` which enforces the URL allowlist.
- *   - The `clearAllBookmarks` + re-upsert pattern avoids stale XSS-risk
- *     URLs accumulating in the store from old, since-deleted bookmarks.
+ *   - Only the `meta` field is carried over from the existing IDB record;
+ *     all other fields (title, url, dateAdded) are always refreshed from Chrome.
  */
 export async function syncAllBookmarks(): Promise<Result<{ count: number }>> {
     try {
+        // Preserve existing classification metadata keyed by Chrome bookmark ID.
+        const existingResult = await getAllBookmarks();
+        if (!existingResult.ok) return existingResult;
+        const existingById = new Map(existingResult.value.map((n) => [n.id, n]));
+
         const tree = await chrome.bookmarks.getTree();
         const nodes = flattenTree(tree);
+        const chromeIds = new Set(nodes.map((n) => n.id));
 
-        const clearResult = await clearAllBookmarks();
-        if (!clearResult.ok) return clearResult;
-
+        // Upsert each Chrome node, restoring meta from the previous IDB record.
         for (const node of nodes) {
-            const upsertResult = await upsertBookmark(node);
+            const existing = existingById.get(node.id);
+            const upsertResult = await upsertBookmark({
+                ...node,
+                meta: existing?.meta,
+            });
             if (!upsertResult.ok) return upsertResult;
+        }
+
+        // Remove IDB records for bookmarks that were deleted from Chrome.
+        for (const id of existingById.keys()) {
+            if (!chromeIds.has(id)) {
+                const deleteResult = await deleteBookmark(id);
+                if (!deleteResult.ok) return deleteResult;
+            }
         }
 
         return ok({ count: nodes.length });

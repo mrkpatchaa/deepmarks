@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 import { validateRawBookmark } from "../../src/lib/bookmarks/sync";
 import type { BookmarkNode } from "../../src/lib/bookmarks/types";
-import { closeDb } from "../../src/lib/storage/db";
+import { closeDb, upsertBookmark } from "../../src/lib/storage/db";
 
 function resetDb(): void {
     closeDb();
@@ -174,6 +174,100 @@ describe("syncAllBookmarks", () => {
             // file:// URL was sanitized to undefined
             const localFile = all.value.find((b: BookmarkNode) => b.id === "3");
             expect(localFile?.url).toBeUndefined();
+        }
+    });
+
+    it("preserves meta.category across a re-sync (browser restart)", async () => {
+        const mockTree: chrome.bookmarks.BookmarkTreeNode[] = [
+            {
+                id: "0",
+                title: "root",
+                syncing: false,
+                children: [
+                    { id: "1", title: "GitHub", url: "https://github.com", dateAdded: 1700000000000, syncing: false },
+                ],
+            },
+        ];
+
+        const getTreeCast = chrome.bookmarks.getTree as () => Promise<chrome.bookmarks.BookmarkTreeNode[]>;
+        vi.mocked(getTreeCast).mockResolvedValue(mockTree);
+
+        const { syncAllBookmarks, getAllBookmarksFromDb } = await import(
+            "../../src/lib/bookmarks/sync"
+        );
+
+        // Initial sync — populates IDB with no meta.
+        await syncAllBookmarks();
+
+        // Simulate classification: write meta directly to IDB.
+        await upsertBookmark({
+            id: "1",
+            title: "GitHub",
+            url: "https://github.com",
+            dateAdded: 1700000000000,
+            meta: {
+                category: "tool",
+                tags: [],
+                classifiedAt: 1700000001000,
+                classifiedBy: "regex",
+            },
+        });
+
+        // Re-sync (simulates onStartup or a bookmark-change watcher fire).
+        await syncAllBookmarks();
+
+        // Meta must be preserved.
+        const all = await getAllBookmarksFromDb();
+        expect(all.ok).toBe(true);
+        if (all.ok) {
+            const github = all.value.find((b: BookmarkNode) => b.id === "1");
+            expect(github?.meta?.category).toBe("tool");
+            expect(github?.meta?.classifiedAt).toBe(1700000001000);
+        }
+    });
+
+    it("removes stale IDB records for bookmarks deleted from Chrome", async () => {
+        const getTreeCast = chrome.bookmarks.getTree as () => Promise<chrome.bookmarks.BookmarkTreeNode[]>;
+
+        // First sync with two bookmarks.
+        vi.mocked(getTreeCast).mockResolvedValueOnce([
+            {
+                id: "0",
+                title: "root",
+                syncing: false,
+                children: [
+                    { id: "10", title: "GitHub", url: "https://github.com", dateAdded: 1700000000000, syncing: false },
+                    { id: "11", title: "MDN", url: "https://developer.mozilla.org", dateAdded: 1700000000001, syncing: false },
+                ],
+            },
+        ]);
+
+        const { syncAllBookmarks, getAllBookmarksFromDb } = await import(
+            "../../src/lib/bookmarks/sync"
+        );
+
+        await syncAllBookmarks();
+
+        // Second sync: id "11" has been deleted from Chrome.
+        vi.mocked(getTreeCast).mockResolvedValueOnce([
+            {
+                id: "0",
+                title: "root",
+                syncing: false,
+                children: [
+                    { id: "10", title: "GitHub", url: "https://github.com", dateAdded: 1700000000000, syncing: false },
+                ],
+            },
+        ]);
+
+        await syncAllBookmarks();
+
+        const all = await getAllBookmarksFromDb();
+        expect(all.ok).toBe(true);
+        if (all.ok) {
+            const ids = all.value.map((b: BookmarkNode) => b.id);
+            expect(ids).toContain("10");
+            expect(ids).not.toContain("11");
         }
     });
 });
