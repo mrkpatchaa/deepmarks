@@ -180,7 +180,7 @@ export async function classifyBatch(
     const results: Array<{ id: string; output: ClassifyOutput }> = [];
     for (const { id, url, title } of items) {
         const category = classifyByRegex(url, title);
-        await persistMeta(id, category, "regex").catch(() => {});
+        await persistMeta(id, category, "regex").catch(() => { });
         results.push({ id, output: { category, usedEngine: "regex" } });
     }
     return { results };
