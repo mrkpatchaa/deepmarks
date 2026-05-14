@@ -42,10 +42,9 @@ import { exportJSON } from "../../lib/agent/export";
 import { classifyAll } from "../../lib/classify/batch";
 import type { ClassifyAllProgress } from "../../lib/classify/batch";
 import { getBestAvailableEngine } from "../../lib/classify/router";
-import type { BYOKEngine } from "../../lib/classify/byok";
 import { savePreferredEngine, loadPreferredEngine } from "../../lib/storage/settings";
 import type { FilterCategory, CategoryCounts } from "../../components/CategoryFilter";
-import type { BookmarkNode, SearchResult, BookmarkMeta } from "../../lib/bookmarks/types";
+import type { BookmarkNode, SearchResult, BookmarkMeta, ClassifyEngine } from "../../lib/bookmarks/types";
 
 const PAGE_SIZE = 200;
 
@@ -75,7 +74,7 @@ export default function App() {
   const [selectedBookmark, setSelectedBookmark] = useState<BookmarkNode | null>(null);
   const [classifyAllState, setClassifyAllState] = useState<ClassifyAllProgress & { running: boolean } | null>(null);
   const classifyAllAbort = useRef<AbortController | null>(null);
-  const [preferredEngine, setPreferredEngine] = useState<BYOKEngine>("openai");
+  const [preferredEngine, setPreferredEngine] = useState<ClassifyEngine>("regex");
   const [categoryCounts, setCategoryCounts] = useState<CategoryCounts>(DEFAULT_COUNTS);
   const loadState = useRef<LoadState>({
     lastKey: undefined,
@@ -260,7 +259,7 @@ export default function App() {
     classifyAllAbort.current?.abort();
   }, []);
 
-  const handleEngineChange = useCallback((engine: BYOKEngine): void => {
+  const handleEngineChange = useCallback((engine: ClassifyEngine): void => {
     setPreferredEngine(engine);
     void savePreferredEngine(engine);
   }, []);

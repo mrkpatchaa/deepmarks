@@ -87,18 +87,25 @@ async function persistMeta(
  * @param id       The bookmark's IndexedDB / chrome ID — used to persist meta.
  * @param url      The bookmark URL.
  * @param title    The bookmark title.
- * @param engine   Preferred BYOK engine; defaults to "openai". If BYOK is
- *                 unavailable or fails, falls back to regex silently.
+ * @param engine   Preferred engine. "regex" runs the fast local matcher directly.
+ *                 BYOK engines fall back to regex on failure.
  */
 export async function classify(
     id: string,
     url: string,
     title: string,
-    engine: BYOKEngine = "openai",
+    engine: ClassifyEngine = "openai",
 ): Promise<Result<ClassifyOutput>> {
     let category: Category;
     let usedEngine: ClassifyEngine;
     let domain: string | undefined;
+
+    // "regex" is an explicit choice — skip BYOK entirely.
+    if (engine === "regex") {
+        category = classifyByRegex(url, title);
+        await persistMeta(id, category, "regex").catch(() => { });
+        return ok({ category, usedEngine: "regex" });
+    }
 
     const byokAvailable = await isByokAvailable(engine);
 
@@ -153,8 +160,19 @@ export interface ClassifyBatchOutput {
  */
 export async function classifyBatch(
     items: Array<{ id: string; url: string; title: string }>,
-    engine: BYOKEngine = "openai",
+    engine: ClassifyEngine = "openai",
 ): Promise<ClassifyBatchOutput> {
+    // "regex" explicit choice — skip BYOK for all items.
+    if (engine === "regex") {
+        const results: Array<{ id: string; output: ClassifyOutput }> = [];
+        for (const { id, url, title } of items) {
+            const category = classifyByRegex(url, title);
+            await persistMeta(id, category, "regex").catch(() => { });
+            results.push({ id, output: { category, usedEngine: "regex" } });
+        }
+        return { results };
+    }
+
     const byokAvailable = await isByokAvailable(engine);
 
     if (byokAvailable) {
@@ -193,8 +211,9 @@ export async function classifyBatch(
  * Returns "regex" when BYOK is unavailable or not configured.
  */
 export async function getActiveEngine(
-    preferredEngine: BYOKEngine = "openai",
+    preferredEngine: ClassifyEngine = "openai",
 ): Promise<ClassifyEngine> {
+    if (preferredEngine === "regex") return "regex";
     const available = await isByokAvailable(preferredEngine);
     return available ? preferredEngine : "regex";
 }

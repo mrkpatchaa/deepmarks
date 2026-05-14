@@ -18,7 +18,7 @@
  * calls classify(), which already validates URLs and sanitises all inputs.
  */
 import type { BookmarkNode } from "../bookmarks/types";
-import type { BYOKEngine } from "./byok";
+import type { ClassifyEngine } from "../bookmarks/types";
 import { classify, classifyBatch, getActiveEngine } from "./router";
 import type { ClassifyOutput } from "./router";
 import { isSafeUrl } from "../bookmarks/url";
@@ -39,14 +39,14 @@ export interface ClassifyAllProgress {
  * Classify all eligible bookmarks in `bookmarks`.
  *
  * @param bookmarks        Source list (typically the full IDB set)
- * @param engine           Preferred BYOK engine; falls back to regex if unavailable
+ * @param engine           Preferred engine ("regex" runs the local matcher directly)
  * @param onProgress       Called after each item (or each batch for regex)
  * @param signal           AbortSignal — stop after the current item finishes
  * @param forceReclassify  When true, re-classify already-categorised bookmarks too
  */
 export async function classifyAll(
     bookmarks: BookmarkNode[],
-    engine: BYOKEngine,
+    engine: ClassifyEngine,
     onProgress: (progress: ClassifyAllProgress) => void,
     signal: AbortSignal,
     forceReclassify = false,

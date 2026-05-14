@@ -11,6 +11,7 @@
  *   - All storage keys are constants defined here to prevent typos.
  */
 import { z } from "zod";
+import type { ClassifyEngine } from "../bookmarks/types";
 import type { BYOKEngine } from "../classify/byok";
 import { CONSENT_KEY } from "../classify/byok";
 import { ALL_CATEGORIES } from "../classify/categories";
@@ -123,7 +124,7 @@ export { CategoryNameSchema, CUSTOM_CATEGORIES_KEY };
 const PREFERRED_ENGINE_KEY = "preferred_engine";
 
 /** Persist the user's chosen classification engine. */
-export async function savePreferredEngine(engine: BYOKEngine): Promise<void> {
+export async function savePreferredEngine(engine: ClassifyEngine): Promise<void> {
     await chrome.storage.local.set({ [PREFERRED_ENGINE_KEY]: engine });
 }
 
@@ -132,11 +133,11 @@ export async function savePreferredEngine(engine: BYOKEngine): Promise<void> {
  * Returns `undefined` when no explicit choice has been stored yet —
  * callers should fall back to `getBestAvailableEngine()` in that case.
  */
-export async function loadPreferredEngine(): Promise<BYOKEngine | undefined> {
+export async function loadPreferredEngine(): Promise<ClassifyEngine | undefined> {
     const raw = await chrome.storage.local.get(PREFERRED_ENGINE_KEY);
     const val: unknown = (raw as Record<string, unknown>)[PREFERRED_ENGINE_KEY];
-    const valid: BYOKEngine[] = ["openai", "anthropic", "gemini", "ollama"];
+    const valid: ClassifyEngine[] = ["regex", "openai", "anthropic", "gemini", "ollama"];
     return typeof val === "string" && (valid as string[]).includes(val)
-        ? (val as BYOKEngine)
+        ? (val as ClassifyEngine)
         : undefined;
 }
