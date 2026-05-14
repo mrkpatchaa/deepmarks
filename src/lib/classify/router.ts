@@ -17,7 +17,7 @@
 import type { Category, ClassifyEngine, Result } from "../bookmarks/types";
 import { ok } from "../bookmarks/types";
 import type { BYOKEngine } from "./byok";
-import { classifyWithBYOK, CONSENT_KEY } from "./byok";
+import { classifyWithBYOK, CONSENT_KEY, classifyBatchWithBYOK } from "./byok";
 import { classifyByRegex } from "./regex";
 import { getBookmarkById, upsertBookmark } from "../storage/db";
 
@@ -130,6 +130,60 @@ export async function classify(
     });
 
     return ok({ category, domain, usedEngine });
+}
+
+// ── Batch public API ────────────────────────────────────────────────────
+
+export interface ClassifyBatchOutput {
+    /** Successfully classified items — absent items should be counted as failed. */
+    results: ReadonlyArray<{ id: string; output: ClassifyOutput }>;
+}
+
+/**
+ * Classify a batch of bookmarks in a single LLM API call.
+ *
+ * When BYOK is available:
+ *   - Sends all items to the LLM in one request (up to BYOK_BATCH_SIZE items).
+ *   - For Ollama failures: returns empty results (surfaces the error as zero
+ *     classified rather than silently falling back to regex).
+ *   - For cloud BYOK failures: falls back to regex classification per item.
+ * When BYOK is unavailable: classifies every item with regex.
+ *
+ * Always persists results to IndexedDB before returning.
+ */
+export async function classifyBatch(
+    items: Array<{ id: string; url: string; title: string }>,
+    engine: BYOKEngine = "openai",
+): Promise<ClassifyBatchOutput> {
+    const byokAvailable = await isByokAvailable(engine);
+
+    if (byokAvailable) {
+        const batchResult = await classifyBatchWithBYOK(items, engine);
+        if (batchResult.ok) {
+            const results: Array<{ id: string; output: ClassifyOutput }> = [];
+            for (const { id, category, domain } of batchResult.value) {
+                await persistMeta(id, category, engine, domain).catch(() => {
+                    // Non-fatal — result is still valid.
+                });
+                results.push({ id, output: { category, domain, usedEngine: engine } });
+            }
+            return { results };
+        } else if (engine === "ollama") {
+            // Ollama is local — surface the failure rather than silently
+            // reclassifying with regex (matches single-item classify() behaviour).
+            return { results: [] };
+        }
+        // Cloud BYOK batch failed — fall back to regex below.
+    }
+
+    // Regex fallback: fast synchronous classification, no network calls.
+    const results: Array<{ id: string; output: ClassifyOutput }> = [];
+    for (const { id, url, title } of items) {
+        const category = classifyByRegex(url, title);
+        await persistMeta(id, category, "regex").catch(() => {});
+        results.push({ id, output: { category, usedEngine: "regex" } });
+    }
+    return { results };
 }
 
 /**

@@ -19,11 +19,13 @@
  */
 import type { BookmarkNode } from "../bookmarks/types";
 import type { BYOKEngine } from "./byok";
-import { classify, getActiveEngine } from "./router";
+import { classify, classifyBatch, getActiveEngine } from "./router";
 import type { ClassifyOutput } from "./router";
 import { isSafeUrl } from "../bookmarks/url";
 
 const REGEX_CONCURRENCY = 5;
+/** Number of bookmarks sent per LLM API call when a BYOK engine is active. */
+const BYOK_BATCH_SIZE = 100;
 
 export interface ClassifyAllProgress {
     done: number;
@@ -65,42 +67,66 @@ export async function classifyAll(
         return { done: 0, total: 0, failed: 0, recentlyClassified: [] };
     }
 
-    // Detect which engine will actually be used so we can set concurrency.
+    // Detect which engine will actually be used so we can choose the loop strategy.
     const activeEngine = await getActiveEngine(engine);
-    const concurrency = activeEngine === "regex" ? REGEX_CONCURRENCY : 1;
 
-    // Process in chunks of `concurrency`.
-    for (let i = 0; i < candidates.length; i += concurrency) {
-        if (signal.aborted) break;
+    if (activeEngine === "regex") {
+        // ── Regex path: fast, no network — run REGEX_CONCURRENCY items in parallel ───
+        for (let i = 0; i < candidates.length; i += REGEX_CONCURRENCY) {
+            if (signal.aborted) break;
 
-        const chunk = candidates.slice(i, i + concurrency);
-        const recentlyClassified: Array<{ id: string; output: ClassifyOutput }> = [];
+            const chunk = candidates.slice(i, i + REGEX_CONCURRENCY);
+            const recentlyClassified: Array<{ id: string; output: ClassifyOutput }> = [];
 
-        await Promise.all(
-            chunk.map(async (bm) => {
-                if (signal.aborted) return;
-                try {
-                    const result = await classify(
-                        bm.id,
-                        bm.url ?? "",
-                        bm.title,
-                        engine,
-                    );
-                    if (!result.ok) {
+            await Promise.all(
+                chunk.map(async (bm) => {
+                    if (signal.aborted) return;
+                    try {
+                        const result = await classify(bm.id, bm.url ?? "", bm.title, engine);
+                        if (!result.ok) {
+                            failed += 1;
+                        } else {
+                            recentlyClassified.push({ id: bm.id, output: result.value });
+                        }
+                    } catch {
+                        // Unexpected exception — count as failed so the loop continues.
                         failed += 1;
-                    } else {
-                        recentlyClassified.push({ id: bm.id, output: result.value });
                     }
-                } catch {
-                    // Unexpected exception from classify() — count as failed and continue
-                    // so one bad bookmark cannot stop the entire batch.
-                    failed += 1;
-                }
-                done += 1;
-            }),
-        );
+                    done += 1;
+                }),
+            );
 
-        onProgress({ done, total, failed, recentlyClassified });
+            onProgress({ done, total, failed, recentlyClassified });
+        }
+    } else {
+        // ── BYOK batch path: BYOK_BATCH_SIZE items per API call ─────────────────────
+        // One network round-trip per batch instead of one per bookmark.
+        for (let i = 0; i < candidates.length; i += BYOK_BATCH_SIZE) {
+            if (signal.aborted) break;
+
+            const chunk = candidates.slice(i, i + BYOK_BATCH_SIZE);
+            const batchItems = chunk.map((bm) => ({
+                id: bm.id,
+                url: bm.url ?? "",
+                title: bm.title,
+            }));
+
+            let recentlyClassified: Array<{ id: string; output: ClassifyOutput }> = [];
+            try {
+                const batchOutput = await classifyBatch(batchItems, engine);
+                recentlyClassified = batchOutput.results.map(({ id, output }) => ({
+                    id,
+                    output,
+                }));
+                failed += chunk.length - batchOutput.results.length;
+            } catch {
+                // Unexpected exception from classifyBatch() — count all items failed.
+                failed += chunk.length;
+            }
+            done += chunk.length;
+
+            onProgress({ done, total, failed, recentlyClassified });
+        }
     }
 
     return { done, total, failed, recentlyClassified: [] };
