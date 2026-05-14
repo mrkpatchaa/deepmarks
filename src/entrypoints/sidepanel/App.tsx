@@ -60,6 +60,9 @@ interface LoadState {
   active: boolean; // true while a page fetch is in-flight
 }
 
+/** True when the app is running as a full tab (opened via Open in tab). */
+const IS_TAB = new URL(location.href).searchParams.get("tab") === "1";
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>("bookmarks");
   const [allBookmarks, setAllBookmarks] = useState<BookmarkNode[]>([]);
@@ -315,26 +318,59 @@ export default function App() {
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Deepmarks
           </h1>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {classifyAllState === null ? (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => { handleClassifyAll(false); }}
-                  className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                >
-                  Classify new
-                </button>
-                <span className="text-xs text-zinc-300 dark:text-zinc-600" aria-hidden="true">|</span>
-                <button
-                  type="button"
-                  onClick={() => { handleClassifyAll(true); }}
-                  className="text-xs text-zinc-400 underline hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
-                >
-                  Re-classify all
-                </button>
-                <EngineSelector value={preferredEngine} onChange={handleEngineChange} />
-              </div>
+              IS_TAB ? (
+                // Full: text buttons
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { handleClassifyAll(false); }}
+                    className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  >
+                    Classify new
+                  </button>
+                  <span className="text-xs text-zinc-300 dark:text-zinc-600" aria-hidden="true">|</span>
+                  <button
+                    type="button"
+                    onClick={() => { handleClassifyAll(true); }}
+                    className="text-xs text-zinc-400 underline hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                  >
+                    Re-classify all
+                  </button>
+                  <EngineSelector value={preferredEngine} onChange={handleEngineChange} />
+                </div>
+              ) : (
+                // Lite: icon-only buttons
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Classify new"
+                    aria-label="Classify new"
+                    onClick={() => { handleClassifyAll(false); }}
+                    className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  >
+                    {/* sparkle / classify-new icon */}
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    title="Re-classify all"
+                    aria-label="Re-classify all"
+                    onClick={() => { handleClassifyAll(true); }}
+                    className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  >
+                    {/* rotate / re-classify icon */}
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="23 4 23 10 17 10"/>
+                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                  </button>
+                  <EngineSelector value={preferredEngine} onChange={handleEngineChange} />
+                </div>
+              )
             ) : (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -354,35 +390,41 @@ export default function App() {
                 </button>
               </div>
             )}
-            <button
-              type="button"
-              onClick={handleExport}
-              className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-            >
-              Export
-            </button>
-            <button
-              type="button"
-              aria-label="Open in tab"
-              title="Open in tab"
-              onClick={() => {
-                void chrome.tabs.create({ url: chrome.runtime.getURL("sidepanel.html") });
-              }}
-              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
-            </button>
+            {/* Export — full tab only */}
+            {IS_TAB && (
+              <button
+                type="button"
+                onClick={handleExport}
+                className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              >
+                Export
+              </button>
+            )}
+            {/* Open-in-tab — sidepanel only */}
+            {!IS_TAB && (
+              <button
+                type="button"
+                aria-label="Open in tab"
+                title="Open in tab"
+                onClick={() => {
+                  void chrome.tabs.create({ url: `${chrome.runtime.getURL("sidepanel.html")}?tab=1` });
+                }}
+                className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </button>
+            )}
             <button
               type="button"
               aria-label="Settings"
               onClick={() => { handleTabChange("settings"); }}
-              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
               </svg>
