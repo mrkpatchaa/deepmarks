@@ -26,7 +26,7 @@
  *   - Export requires explicit user gesture (button click), uses File System Access API.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getBookmarkPage, getAllBookmarks, getBookmarkCounts } from "../../lib/storage/db";
+import { getBookmarkPage, getAllBookmarks, getBookmarkCounts, getBookmarksByCategory } from "../../lib/storage/db";
 import { StatsView } from "../../components/StatsView";
 import { SettingsView } from "../../components/SettingsView";
 import { BookmarkList } from "../../components/BookmarkList";
@@ -76,6 +76,8 @@ export default function App() {
   const classifyAllAbort = useRef<AbortController | null>(null);
   const [preferredEngine, setPreferredEngine] = useState<ClassifyEngine>("regex");
   const [categoryCounts, setCategoryCounts] = useState<CategoryCounts>(DEFAULT_COUNTS);
+  const [categoryBookmarks, setCategoryBookmarks] = useState<BookmarkNode[] | null>(null);
+  const [categoryLoading, setCategoryLoading] = useState(false);
   const loadState = useRef<LoadState>({
     lastKey: undefined,
     hasMore: true,
@@ -152,8 +154,24 @@ export default function App() {
   }, []);
 
   // Handle category pill click — toggle to "all" if clicking the active pill.
+  // When a specific category is selected, fetch its full list from IDB so the
+  // displayed count matches the pill count (the paginated allBookmarks list may
+  // not contain every bookmark of that category).
   const handleCategorySelect = useCallback((cat: FilterCategory): void => {
-    setSelectedCategory((prev) => (prev === cat ? "all" : cat));
+    setSelectedCategory((prev) => {
+      const next = prev === cat ? "all" : cat;
+      if (next === "all") {
+        setCategoryBookmarks(null);
+        setCategoryLoading(false);
+      } else {
+        setCategoryLoading(true);
+        void getBookmarksByCategory(next).then((result) => {
+          if (result.ok) setCategoryBookmarks(result.value);
+          setCategoryLoading(false);
+        });
+      }
+      return next;
+    });
   }, []);
 
   // Compile wiki when switching to wiki tab.
@@ -249,11 +267,17 @@ export default function App() {
         if (counts.ok) {
           setCategoryCounts(counts.value);
         }
+        // If a category filter is active, refresh its list from IDB.
+        if (selectedCategory !== "all") {
+          void getBookmarksByCategory(selectedCategory).then((r) => {
+            if (r.ok) setCategoryBookmarks(r.value);
+          });
+        }
         setClassifyAllState(null);
         classifyAllAbort.current = null;
       }
     })();
-  }, [classifyAllState, preferredEngine]);
+  }, [classifyAllState, preferredEngine, selectedCategory]);
 
   const handleCancelClassifyAll = useCallback((): void => {
     classifyAllAbort.current?.abort();
@@ -287,17 +311,41 @@ export default function App() {
         [oldCat]: Math.max(0, prev[oldCat] - 1),
         [newCat]: prev[newCat] + 1,
       }));
+      // Keep the category-filtered list in sync:
+      // remove the bookmark if it no longer belongs to the active category,
+      // or add it if it now belongs.
+      if (selectedCategory !== "all") {
+        setCategoryBookmarks((prev) => {
+          if (prev === null) return null;
+          if (String(oldCat) === selectedCategory) {
+            return prev.filter((bm) => bm.id !== updated.id);
+          }
+          if (String(newCat) === selectedCategory) {
+            return [...prev, updated];
+          }
+          return prev;
+        });
+      }
+    } else if (selectedCategory !== "all") {
+      // Category unchanged but meta may have updated — keep the item current.
+      setCategoryBookmarks((prev) =>
+        prev === null ? null : prev.map((bm) => (bm.id === updated.id ? updated : bm)),
+      );
     }
-  }, [selectedBookmark]);
+  }, [selectedBookmark, selectedCategory]);
 
-  // Base list: search results when searching, full allBookmarks otherwise.
-  const baseList = searchResults ?? allBookmarks;
-
-  // Apply category filter on top of base list.
+  // When searching: always filter search results by category (they're a small pre-fetched set).
+  // When not searching + "all": use the paginated allBookmarks list.
+  // When not searching + specific category: use the IDB-fetched categoryBookmarks list so the
+  // displayed count is always consistent with the pill count.
   const displayedBookmarks =
-    selectedCategory === "all"
-      ? baseList
-      : baseList.filter((bm) => (bm.meta?.category ?? "other") === selectedCategory);
+    searchResults !== null
+      ? (selectedCategory === "all"
+          ? searchResults
+          : searchResults.filter((bm) => (bm.meta?.category ?? "other") === selectedCategory))
+      : (selectedCategory === "all"
+          ? allBookmarks
+          : (categoryBookmarks ?? []));
 
   // Result count for SearchBar — only show when a search is active.
   const resultCount = searchResults !== null ? displayedBookmarks.length : undefined;

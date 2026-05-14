@@ -123,6 +123,25 @@ export async function clearAllBookmarks(): Promise<Result<void>> {
 }
 
 /**
+ * Retrieve all bookmarks matching a specific category.
+ *
+ * "other" matches bookmarks that have no category assigned yet (meta.category
+ * is undefined) as well as those explicitly set to "other".
+ */
+export async function getBookmarksByCategory(
+    category: string,
+): Promise<Result<BookmarkNode[]>> {
+    try {
+        const db = await openDb();
+        const all = await db.getAll("bookmarks");
+        const filtered = all.filter((bm) => (bm.meta?.category ?? "other") === category);
+        return ok(filtered);
+    } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+    }
+}
+
+/**
  * Retrieve a page of bookmarks using a key-range cursor (Task 3.1).
  *
  * @param startAfterKey - Primary key to start after (exclusive).
