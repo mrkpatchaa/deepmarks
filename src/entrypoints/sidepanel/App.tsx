@@ -186,7 +186,7 @@ export default function App() {
   }, []);
 
   // Classify All — batch-classify every unclassified bookmark.
-  const handleClassifyAll = useCallback((): void => {
+  const handleClassifyAll = useCallback((force = false): void => {
     if (classifyAllState?.running) return;
     const abort = new AbortController();
     classifyAllAbort.current = abort;
@@ -229,6 +229,7 @@ export default function App() {
             }
           },
           abort.signal,
+          force,
         );
       } finally {
         // Always reload from IDB after completion, cancellation, or unexpected error
@@ -305,13 +306,23 @@ export default function App() {
           </h1>
           <div className="flex items-center gap-3">
             {classifyAllState === null ? (
-              <button
-                type="button"
-                onClick={handleClassifyAll}
-                className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-              >
-                Classify All
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { handleClassifyAll(false); }}
+                  className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                >
+                  Classify new
+                </button>
+                <span className="text-xs text-zinc-300 dark:text-zinc-600" aria-hidden="true">|</span>
+                <button
+                  type="button"
+                  onClick={() => { handleClassifyAll(true); }}
+                  className="text-xs text-zinc-400 underline hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                >
+                  Re-classify all
+                </button>
+              </div>
             ) : (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
