@@ -28,10 +28,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBookmarkPage, getAllBookmarks, getBookmarkCounts } from "../../lib/storage/db";
 import { StatsView } from "../../components/StatsView";
+import { SettingsView } from "../../components/SettingsView";
 import { BookmarkList } from "../../components/BookmarkList";
 import { SearchBar } from "../../components/SearchBar";
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { WikiView } from "../../components/WikiView";
+import { EngineSelector } from "../../components/Settings/EngineSelector";
 import { ClassifyPanel } from "../../components/ClassifyPanel";
 import type { ClassifyResult } from "../../components/ClassifyPanel";
 import { compileWiki } from "../../lib/wiki/compile";
@@ -41,6 +43,7 @@ import { classifyAll } from "../../lib/classify/batch";
 import type { ClassifyAllProgress } from "../../lib/classify/batch";
 import { getBestAvailableEngine } from "../../lib/classify/router";
 import type { BYOKEngine } from "../../lib/classify/byok";
+import { savePreferredEngine, loadPreferredEngine } from "../../lib/storage/settings";
 import type { FilterCategory, CategoryCounts } from "../../components/CategoryFilter";
 import type { BookmarkNode, SearchResult, BookmarkMeta } from "../../lib/bookmarks/types";
 
@@ -48,7 +51,7 @@ const PAGE_SIZE = 200;
 
 const DEFAULT_COUNTS: CategoryCounts = { all: 0 };
 
-type TabId = "bookmarks" | "wiki" | "stats";
+type TabId = "bookmarks" | "wiki" | "stats" | "settings";
 
 /** Mutable ref bag — avoids stale closure issues without extra re-renders. */
 interface LoadState {
@@ -109,11 +112,14 @@ export default function App() {
     })();
   }, []);
 
-  // Load first page + accurate counts on mount; also detect the best engine.
+  // Load first page + accurate counts on mount; also restore the saved engine.
   useEffect(() => {
     loadPage();
     loadCounts();
-    void getBestAvailableEngine().then(setPreferredEngine);
+    void (async () => {
+      const saved = await loadPreferredEngine();
+      setPreferredEngine(saved ?? await getBestAvailableEngine());
+    })();
     setInitialLoading(false);
   }, [loadPage, loadCounts]);
 
@@ -251,6 +257,11 @@ export default function App() {
     classifyAllAbort.current?.abort();
   }, []);
 
+  const handleEngineChange = useCallback((engine: BYOKEngine): void => {
+    setPreferredEngine(engine);
+    void savePreferredEngine(engine);
+  }, []);
+
   // After classification, update the bookmark's meta in local state so the  // category badge appears immediately without a full reload.
   const handleClassified = useCallback((result: ClassifyResult): void => {
     if (selectedBookmark === null) return;
@@ -322,6 +333,7 @@ export default function App() {
                 >
                   Re-classify all
                 </button>
+                <EngineSelector value={preferredEngine} onChange={handleEngineChange} />
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -367,7 +379,7 @@ export default function App() {
             <button
               type="button"
               aria-label="Settings"
-              onClick={() => { chrome.runtime.openOptionsPage(); }}
+              onClick={() => { handleTabChange("settings"); }}
               className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -444,6 +456,15 @@ export default function App() {
         >
           Stats
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "settings"}
+          onClick={() => { handleTabChange("settings"); }}
+          className={`px-4 py-2 text-sm font-medium ${activeTab === "settings" ? "border-b-2 border-blue-500 text-blue-600 dark:text-blue-400" : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"}`}
+        >
+          Settings
+        </button>
       </nav>
 
       {activeTab === "bookmarks" && (
@@ -473,6 +494,12 @@ export default function App() {
       {activeTab === "stats" && (
         <main className="flex-1 overflow-hidden">
           <StatsView />
+        </main>
+      )}
+
+      {activeTab === "settings" && (
+        <main className="flex flex-col flex-1 overflow-hidden">
+          <SettingsView />
         </main>
       )}
 

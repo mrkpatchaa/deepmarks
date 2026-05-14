@@ -1,43 +1,34 @@
 /**
- * Options page root — Task 5.1
+ * Options page — redirects users to the Settings tab in the sidepanel.
  *
- * Provider BYOK key management and engine status dashboard.
- *
- * SECURITY:
- *   - Keys written to chrome.storage.local only (via BYOKInput).
- *   - No key values are rendered or logged anywhere in this file.
+ * All settings (BYOK keys, engine status, categories) now live in the
+ * Deepmarks sidepanel under the Settings tab. This page exists only
+ * because Chrome requires an options page when one is declared in the
+ * manifest.
  */
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "../../assets/tailwind.css";
-import { BYOKInput } from "../../components/Settings/BYOKInput";
-import { ClassifyEngineStatus } from "../../components/Settings/ClassifyEngineStatus";
-import { CategoryEditor } from "../../components/Settings/CategoryEditor";
 
 function OptionsApp() {
   return (
-    <div className="min-h-screen bg-white px-4 py-8 dark:bg-zinc-900">
-      <div className="mx-auto max-w-2xl space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+    <div className="flex min-h-screen items-center justify-center bg-white px-4 dark:bg-zinc-900">
+      <div className="space-y-4 text-center">
+        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
           Deepmarks Settings
         </h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Configure your bookmark classification engine.
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Settings have moved to the Deepmarks sidepanel.
         </p>
-      </header>
-
-      <hr className="border-zinc-200 dark:border-zinc-700" />
-
-      <ClassifyEngineStatus />
-
-      <hr className="border-zinc-200 dark:border-zinc-700" />
-
-      <BYOKInput />
-
-      <hr className="border-zinc-200 dark:border-zinc-700" />
-
-      <CategoryEditor />
+        <button
+          type="button"
+          onClick={() => {
+            void chrome.tabs.create({ url: chrome.runtime.getURL("sidepanel.html") });
+          }}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          Open Deepmarks
+        </button>
       </div>
     </div>
   );

@@ -117,3 +117,26 @@ export async function restoreDefaultCategories(): Promise<void> {
 }
 
 export { CategoryNameSchema, CUSTOM_CATEGORIES_KEY };
+
+// ── Preferred classification engine (chrome.storage.local) ───────────────
+
+const PREFERRED_ENGINE_KEY = "preferred_engine";
+
+/** Persist the user's chosen classification engine. */
+export async function savePreferredEngine(engine: BYOKEngine): Promise<void> {
+    await chrome.storage.local.set({ [PREFERRED_ENGINE_KEY]: engine });
+}
+
+/**
+ * Read the user's previously saved engine choice.
+ * Returns `undefined` when no explicit choice has been stored yet —
+ * callers should fall back to `getBestAvailableEngine()` in that case.
+ */
+export async function loadPreferredEngine(): Promise<BYOKEngine | undefined> {
+    const raw = await chrome.storage.local.get(PREFERRED_ENGINE_KEY);
+    const val: unknown = (raw as Record<string, unknown>)[PREFERRED_ENGINE_KEY];
+    const valid: BYOKEngine[] = ["openai", "anthropic", "gemini", "ollama"];
+    return typeof val === "string" && (valid as string[]).includes(val)
+        ? (val as BYOKEngine)
+        : undefined;
+}
