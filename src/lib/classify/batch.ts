@@ -20,6 +20,7 @@
 import type { BookmarkNode } from "../bookmarks/types";
 import type { BYOKEngine } from "./byok";
 import { classify, getActiveEngine } from "./router";
+import type { ClassifyOutput } from "./router";
 import { isSafeUrl } from "../bookmarks/url";
 
 const REGEX_CONCURRENCY = 5;
@@ -28,6 +29,8 @@ export interface ClassifyAllProgress {
     done: number;
     total: number;
     failed: number;
+    /** Items classified in the most-recent batch iteration — used for live UI updates. */
+    recentlyClassified: ReadonlyArray<{ id: string; output: ClassifyOutput }>;
 }
 
 /**
@@ -58,8 +61,8 @@ export async function classifyAll(
     let failed = 0;
 
     if (total === 0) {
-        onProgress({ done: 0, total: 0, failed: 0 });
-        return { done: 0, total: 0, failed: 0 };
+        onProgress({ done: 0, total: 0, failed: 0, recentlyClassified: [] });
+        return { done: 0, total: 0, failed: 0, recentlyClassified: [] };
     }
 
     // Detect which engine will actually be used so we can set concurrency.
@@ -71,22 +74,34 @@ export async function classifyAll(
         if (signal.aborted) break;
 
         const chunk = candidates.slice(i, i + concurrency);
+        const recentlyClassified: Array<{ id: string; output: ClassifyOutput }> = [];
+
         await Promise.all(
             chunk.map(async (bm) => {
                 if (signal.aborted) return;
-                const result = await classify(
-                    bm.id,
-                    bm.url ?? "",
-                    bm.title,
-                    engine,
-                );
-                if (!result.ok) failed += 1;
+                try {
+                    const result = await classify(
+                        bm.id,
+                        bm.url ?? "",
+                        bm.title,
+                        engine,
+                    );
+                    if (!result.ok) {
+                        failed += 1;
+                    } else {
+                        recentlyClassified.push({ id: bm.id, output: result.value });
+                    }
+                } catch {
+                    // Unexpected exception from classify() — count as failed and continue
+                    // so one bad bookmark cannot stop the entire batch.
+                    failed += 1;
+                }
                 done += 1;
             }),
         );
 
-        onProgress({ done, total, failed });
+        onProgress({ done, total, failed, recentlyClassified });
     }
 
-    return { done, total, failed };
+    return { done, total, failed, recentlyClassified: [] };
 }

@@ -190,7 +190,7 @@ export default function App() {
     if (classifyAllState?.running) return;
     const abort = new AbortController();
     classifyAllAbort.current = abort;
-    setClassifyAllState({ running: true, done: 0, total: 0, failed: 0 });
+    setClassifyAllState({ running: true, done: 0, total: 0, failed: 0, recentlyClassified: [] });
     void (async () => {
       // Load the full bookmark set from IDB (may be larger than what's paged in).
       const result = await getAllBookmarks();
@@ -198,24 +198,51 @@ export default function App() {
         setClassifyAllState(null);
         return;
       }
-      await classifyAll(
-        result.value,
-        preferredEngine,
-        (progress) => {
-          setClassifyAllState({ running: true, ...progress });
-        },
-        abort.signal,
-      );
-      // Reload all bookmarks and counts so badges and filter pills update.
-      const [refreshed, counts] = await Promise.all([getAllBookmarks(), getBookmarkCounts()]);
-      if (refreshed.ok) {
-        setAllBookmarks(refreshed.value);
+      try {
+        await classifyAll(
+          result.value,
+          preferredEngine,
+          (progress) => {
+            setClassifyAllState({ running: true, ...progress });
+            // Update individual bookmark cards on the fly — category badges appear
+            // immediately as each item is classified rather than only at the end.
+            if (progress.recentlyClassified.length > 0) {
+              setAllBookmarks((prev) => {
+                const byId = new Map(prev.map((bm) => [bm.id, bm]));
+                for (const { id, output } of progress.recentlyClassified) {
+                  const bm = byId.get(id);
+                  if (bm !== undefined) {
+                    byId.set(id, {
+                      ...bm,
+                      meta: {
+                        tags: bm.meta?.tags ?? [],
+                        classifiedAt: Date.now(),
+                        classifiedBy: output.usedEngine,
+                        category: output.category,
+                        domain: output.domain,
+                      },
+                    });
+                  }
+                }
+                return prev.map((bm) => byId.get(bm.id) ?? bm);
+              });
+            }
+          },
+          abort.signal,
+        );
+      } finally {
+        // Always reload from IDB after completion, cancellation, or unexpected error
+        // so the UI stays in sync and setClassifyAllState(null) is always called.
+        const [refreshed, counts] = await Promise.all([getAllBookmarks(), getBookmarkCounts()]);
+        if (refreshed.ok) {
+          setAllBookmarks(refreshed.value);
+        }
+        if (counts.ok) {
+          setCategoryCounts(counts.value);
+        }
+        setClassifyAllState(null);
+        classifyAllAbort.current = null;
       }
-      if (counts.ok) {
-        setCategoryCounts(counts.value);
-      }
-      setClassifyAllState(null);
-      classifyAllAbort.current = null;
     })();
   }, [classifyAllState, preferredEngine]);
 
@@ -316,7 +343,7 @@ export default function App() {
               aria-label="Open in tab"
               title="Open in tab"
               onClick={() => {
-                void chrome.tabs.create({ url: chrome.runtime.getURL("sidepanel/index.html") });
+                void chrome.tabs.create({ url: chrome.runtime.getURL("sidepanel.html") });
               }}
               className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
             >

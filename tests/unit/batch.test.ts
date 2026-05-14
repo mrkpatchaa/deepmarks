@@ -56,9 +56,9 @@ describe("classifyAll", () => {
     it("1. returns zero progress for empty input", async () => {
         const progress: { done: number; total: number; failed: number }[] = [];
         const result = await classifyAll([], "openai", (p) => { progress.push(p); }, neverSignal);
-        expect(result).toEqual({ done: 0, total: 0, failed: 0 });
+        expect(result).toEqual({ done: 0, total: 0, failed: 0, recentlyClassified: [] });
         expect(progress).toHaveLength(1);
-        expect(progress[0]).toEqual({ done: 0, total: 0, failed: 0 });
+        expect(progress[0]).toEqual({ done: 0, total: 0, failed: 0, recentlyClassified: [] });
     });
 
     it("2. skips already-classified bookmarks", async () => {
